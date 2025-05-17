@@ -1,0 +1,12 @@
+[package]
+name = "sanma_engine"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]        # produce a shared library PyO3 can wrap
+
+[dependencies]
+pyo3 = { version = "0.21", features = ["extension-module"] }
+numpy = "0.21"
+rand  = { version = "0.8", features = ["std"] }
