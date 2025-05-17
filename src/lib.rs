@@ -10,7 +10,7 @@ mod game_state;
 pub use tiles::Tile;
 pub use hand::Hand;
 pub use wall::Wall;
-pub use game_state::GameState;
+pub use game_state::{GameState, WinType};
 
 #[pyclass]
 struct Env {
@@ -29,9 +29,11 @@ impl Env {
         self._obs(py)
     }
 
-    fn step<'py>(&mut self, action: u8, py: Python<'py>)
-        -> PyResult<(&'py PyArray1<u8>, f32, bool)>
-    {
+    fn step<'py>(
+        &mut self,
+        action: u8,
+        py: Python<'py>,
+    ) -> PyResult<(&'py PyArray1<u8>, f32, bool)> {
         // 1. Interpret action as a Tile
         let tile = Tile::try_from(action)
             .map_err(|_| PyValueError::new_err("Invalid tile action"))?;
@@ -41,12 +43,28 @@ impl Env {
             return Err(PyValueError::new_err("Invalid discard"));
         }
 
-        // 3. Draw for next turn
+        // 3. Check for Ron
+        for seat in 0..3 {
+            if seat != self.state.turn as usize {
+                if self.state.check_ron(tile, self.state.turn as usize) {
+                    // pass the actual tile into Ron(), not a usize
+                    let score = self.state.score_win(seat, WinType::Ron(tile));
+                    let reward = score.points as f32;
+                    return Ok((self._obs(py), reward, true));
+                }
+            }
+        }
+
+        // 4. Check for Tsumo
+        if self.state.check_tsumo() {
+            let score = self.state.score_win(self.state.turn as usize, WinType::Tsumo);
+            let reward = score.points as f32;
+            return Ok((self._obs(py), reward, true));
+        }
+
+        // 5. Advance turn and draw
         self.state.next_turn();
         self.state.draw_for_current();
-
-        // 4. Advance turn
-        self.state.next_turn();
 
         Ok((self._obs(py), 0.0, false))
     }
