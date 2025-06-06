@@ -246,7 +246,7 @@ pub fn parse_kokushi_musou_sanma(tile_counts: &[u8; 34]) -> Option<ParsedKokushi
                 triplet_count += 1;
                 triplet_tile_candidate = Some(sanma_orphan_types[idx]);
             }
-            _ if count > 3 => return None, // More than a triplet of an orphan type
+            4..=u8::MAX => return None, // More than a triplet of an orphan type
             0 => {} // This orphan type is not present, which is only okay if we haven't found all 11 yet.
         }
     }
