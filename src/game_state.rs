@@ -1264,8 +1264,8 @@ impl GameState {
 
         // Winner collects all riichi and honba sticks that were on the table.
         // This is added ON TOP of the hand payments.
-        self.player_scores[winning_player_seat] += (self.riichi_sticks as i32 * 1000);
-        self.player_scores[winning_player_seat] += (self.honba_sticks as i32 * 300);
+        self.player_scores[winning_player_seat] += self.riichi_sticks as i32 * 1000;
+        self.player_scores[winning_player_seat] += self.honba_sticks as i32 * 300;
 
         self.riichi_sticks = 0; // Reset riichi sticks from table
         // Honba sticks for the *next* round are determined by Env based on game outcome,
