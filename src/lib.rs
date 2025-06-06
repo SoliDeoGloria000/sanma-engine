@@ -569,7 +569,7 @@ impl Env {
         &self,
         py: Python<'py>,
     ) -> (Py<PyArray<u8, Ix3>>, Py<PyArray1<bool>>) {
-        let obs_array = PyArray::zeros(py, OBS_SHAPE, false);
+        let obs_array = PyArray::zeros_bound(py, OBS_SHAPE, false).unbind();
 
         // TODO: Populate obs_array based on self.state and OBS_SHAPE definition
         let mut legal_actions_vec = vec![false; ACTION_SPACE_SIZE];
@@ -671,8 +671,8 @@ impl Env {
             }
         }
 
-        let legal_actions_pyarray = PyArray1::from_vec(py, legal_actions_vec);
-        (obs_array.to_owned(), legal_actions_pyarray.to_owned())
+        let legal_actions_pyarray = PyArray1::from_vec_bound(py, legal_actions_vec).unbind();
+        (obs_array.unbind(), legal_actions_pyarray.unbind())
     }
 
     fn _get_call_options_for_discard(
