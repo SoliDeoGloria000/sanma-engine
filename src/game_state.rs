@@ -1440,7 +1440,6 @@ fn count_daisangen_yaku(final_counts: &[u8;34], open_melds: &[DeclaredMeld], par
     if white_triplet && green_triplet && red_triplet { 13 } else { 0 }
 }
 fn count_shousuushii_yaku(parsed_std_hand: &ParsedStandardHand, open_melds: &[DeclaredMeld], _menzen: bool) -> u8 {
-    let mut wind_koutsu_count = 0;
     let mut wind_koutsu_types: Vec<Tile> = Vec::new(); // To store unique wind koutsu tiles
     let mut wind_pair: Option<Tile> = None;
     let winds = [Tile::East, Tile::South, Tile::West, Tile::North];
@@ -1456,7 +1455,6 @@ fn count_shousuushii_yaku(parsed_std_hand: &ParsedStandardHand, open_melds: &[De
            matches!(open_meld.meld_type, DeclaredMeldType::Pon | DeclaredMeldType::Ankan | DeclaredMeldType::Daiminkan | DeclaredMeldType::Shouminkan) {
             if !wind_koutsu_types.contains(&open_meld.tiles[0]) {
                 wind_koutsu_types.push(open_meld.tiles[0]);
-                // wind_koutsu_count +=1; // This way counts unique koutsu types
             }
         }
     }
@@ -1467,15 +1465,12 @@ fn count_shousuushii_yaku(parsed_std_hand: &ParsedStandardHand, open_melds: &[De
             if !open_melds.iter().any(|om| om.meld_type == DeclaredMeldType::Ankan && om.tiles[0] == p_meld.representative_tile) {
                 if !wind_koutsu_types.contains(&p_meld.representative_tile) {
                      wind_koutsu_types.push(p_meld.representative_tile);
-                    // wind_koutsu_count +=1;
                 }
             }
         }
     }
-    wind_koutsu_count = wind_koutsu_types.len();
-    
     // Shousuushii: 3 Koutsu of winds + 1 pair of the 4th wind type.
-    if wind_koutsu_count == 3 && wind_pair.is_some() {
+    if wind_koutsu_types.len() == 3 && wind_pair.is_some() {
         // Ensure the pair tile is different from the koutsu tiles
         if !wind_koutsu_types.contains(&wind_pair.unwrap()) {
             // All 4 wind types must be present (3 as koutsu, 1 as pair)
@@ -1910,10 +1905,8 @@ fn count_shousangen_yaku(parsed_std_hand: &ParsedStandardHand) -> (bool, u8) {
 fn count_honroutou_yaku(parsed_std_hand: Option<&ParsedStandardHand>, parsed_chiitoi: Option<&ParsedChiitoitsu>) -> (bool, u8) {
     // Honroutou: Hand consists only of terminal (1,9) and honor tiles. Must contain at least one Koutsu/Shuntsu (for std hand).
     let mut all_terminal_honor = true;
-    let mut has_melds_or_pairs = false; // To ensure hand is not empty
 
-    if let Some(ref std_hand) = parsed_std_hand {
-        has_melds_or_pairs = true;
+    let has_melds_or_pairs = if let Some(ref std_hand) = parsed_std_hand {
         if !std_hand.pair.is_terminal_or_honor() { all_terminal_honor = false; }
         for meld in &std_hand.melds {
             if !meld.tiles.iter().all(|t| t.is_terminal_or_honor()) {
@@ -1923,14 +1916,15 @@ fn count_honroutou_yaku(parsed_std_hand: Option<&ParsedStandardHand>, parsed_chi
         // Honroutou often implies Toitoi or Chiitoi. If it has sequences, they must be terminal sequences (not possible).
         // So, for std_hand, it must be all Koutsu of T/H + pair of T/H.
         // If all_terminal_honor is true, it implies no simples, so if it's a std_hand, it's likely Toitoi-like.
+        true
     } else if let Some(ref chiitoi) = parsed_chiitoi {
-        has_melds_or_pairs = true;
         if !chiitoi.pair_representative_tiles.iter().all(|t| t.is_terminal_or_honor()) {
             all_terminal_honor = false;
         }
+        true
     } else { // No valid hand structure parsed
         return (false, 0);
-    }
+    };
 
     if has_melds_or_pairs && all_terminal_honor {
         // Check if it's also Tsuu Iisou (All Honors) or Chinroutou (All Terminals) - those are Yakuman.
