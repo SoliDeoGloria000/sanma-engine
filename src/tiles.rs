@@ -96,6 +96,60 @@ impl Tile {
     }
 }
 
+/// Helper trait exposing convenience methods for `Tile`.
+///
+/// This trait used to live inside `game_state.rs`, which made it
+/// inaccessible to other modules.  Modules such as `hand_parser` rely on
+/// these helper methods (e.g. `get_suit`) so the trait needs to be public
+/// and defined where `Tile` itself is defined.  Moving the definition here
+/// fixes compilation errors caused by the trait being private.
+pub trait TileExt {
+    fn is_manzu(&self) -> bool;
+    fn is_pinzu(&self) -> bool;
+    fn is_sou(&self) -> bool;
+    fn get_suit_char(&self) -> Option<char>;
+    fn get_suit(&self) -> Option<u8>;
+    fn get_number_val(&self) -> Option<u8>;
+    fn is_suited_number(&self) -> bool;
+    fn is_terminal(&self) -> bool;
+    fn is_honor(&self) -> bool;
+    fn is_terminal_or_honor(&self) -> bool;
+    fn is_dragon(&self) -> bool;
+    fn is_wind(&self) -> bool;
+    fn next_in_series(&self) -> Tile;
+    fn to_unicode_char(self) -> char;
+}
+
+impl TileExt for Tile {
+    fn is_manzu(&self) -> bool { (*self as u8) <= (Tile::Man9 as u8) }
+    fn is_pinzu(&self) -> bool { (*self as u8) >= (Tile::Pin1 as u8) && (*self as u8) <= (Tile::Pin9 as u8) }
+    fn is_sou(&self) -> bool { (*self as u8) >= (Tile::Sou1 as u8) && (*self as u8) <= (Tile::Sou9 as u8) }
+
+    fn get_suit_char(&self) -> Option<char> {
+        if self.is_manzu() { Some('m') }
+        else if self.is_pinzu() { Some('p') }
+        else if self.is_sou() { Some('s') }
+        else { None }
+    }
+
+    fn get_suit(&self) -> Option<u8> {
+        if self.is_manzu() { Some(0) }
+        else if self.is_pinzu() { Some(1) }
+        else if self.is_sou() { Some(2) }
+        else { None }
+    }
+
+    fn get_number_val(&self) -> Option<u8> { Tile::get_number_val(*self) }
+    fn is_suited_number(&self) -> bool { Tile::is_suited_number(*self) }
+    fn is_terminal(&self) -> bool { Tile::is_terminal(*self) }
+    fn is_honor(&self) -> bool { Tile::is_honor(*self) }
+    fn is_terminal_or_honor(&self) -> bool { Tile::is_terminal_or_honor(*self) }
+    fn is_dragon(&self) -> bool { Tile::is_dragon(*self) }
+    fn is_wind(&self) -> bool { Tile::is_wind(*self) }
+    fn next_in_series(&self) -> Tile { Tile::next_in_series(*self) }
+    fn to_unicode_char(self) -> char { Tile::to_unicode(self) }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
