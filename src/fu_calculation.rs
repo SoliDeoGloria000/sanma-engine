@@ -1,7 +1,7 @@
 // src/fu_calculation.rs
 
 use crate::tiles::Tile;
-use crate::hand_parser::{ParsedStandardHand, ParsedMeldType as HandParserMeldType};
+use crate::hand_parser::{ParsedStandardHand, ParsedMeld, ParsedMeldType as HandParserMeldType};
 use crate::game_state::{WinType, DeclaredMeld, DeclaredMeldType}; // For context from GameState
 
 /// Contains all necessary information about the winning hand and game context for Fu calculation.
@@ -34,7 +34,7 @@ pub struct FuCalculationInput<'a> {
     /// The player's hand object *before* the winning tile was added.
     /// This is OPTIONAL but VERY HELPFUL for unambiguously determining the wait pattern.
     /// If None, wait pattern detection will be an estimation based on the final 14 tiles.
-    pub hand_before_win_completion: Option<&'a crate::hand::Hand>, // Using crate::hand::Hand path
+    pub _hand_before_win_completion: Option<&'a crate::hand::Hand>, // Using crate::hand::Hand path
 }
 
 /// Calculates Fu for a standard winning hand (4 melds, 1 pair).
@@ -72,16 +72,7 @@ pub fn calculate_fu(input: &FuCalculationInput) -> u8 {
     //   - Ankan (concealed quad) - should be in `open_melds_declared`
     //   - Minkan (open quad, from Daiminkan or Shouminkan) - should be in `open_melds_declared`
 
-    // Create a helper structure to hold properties of the 4 final melds + pair
-    struct FinalMeldInfo {
-        tile: Tile, // Representative tile
-        is_koutsu: bool, // True if Koutsu/Kantsu, false if Shuntsu
-        is_kantsu: bool,
-        is_open: bool, // True if Minkou or Minkan (not Ankou/Ankan)
-        is_terminal_or_honor: bool,
-    }
 
-    let mut final_meld_infos: Vec<FinalMeldInfo> = Vec::with_capacity(4);
 
     // Process Kantsu first from `open_melds_declared` as they are explicit.
     let mut kantsu_tiles_processed: Vec<Tile> = Vec::new(); // To avoid double counting with parsed_hand
@@ -146,38 +137,34 @@ pub fn calculate_fu(input: &FuCalculationInput) -> u8 {
     // This is complex and ideally uses the 13-tile tenpai state.
     // We attempt to infer from the final 14-tile `parsed_hand` and `winning_tile`.
     let winning_t = input.winning_tile;
-    let mut wait_fu_added = false;
 
     // Check if winning tile completed the pair (Tanki wait)
     if winning_t == input.parsed_hand.pair {
         // Check if this Tanki wait is not part of a sequence completion for Pinfu
         // (Pinfu requires ryanmen, so Tanki is not Pinfu wait)
         fu += 2; // Tanki (pair wait)
-        wait_fu_added = true;
-    }
-
-    // Check if winning tile completed one of the 4 melds
-    if !wait_fu_added {
+    } else {
+        // Check if winning tile completed one of the 4 melds
         for p_meld in &input.parsed_hand.melds {
             if p_meld.tiles.contains(&winning_t) { // Winning tile is part of this meld
                 if p_meld.meld_type == HandParserMeldType::Shuntsu {
                     let t0 = p_meld.tiles[0];
                     let t1 = p_meld.tiles[1];
                     let t2 = p_meld.tiles[2];
-                    
+
                     // Kanchan (closed interval wait, e.g., 4-6 waiting for 5)
-                    if winning_t == t1 { // Winning tile is the middle of the sequence
-                        fu += 2; wait_fu_added = true; break;
+                    if winning_t == t1 {
+                        fu += 2;
+                        break;
                     }
                     // Penchan (edge wait, e.g., 1-2 waiting for 3, or 8-9 waiting for 7)
-                    if (winning_t == t2 && t0.get_number_val() == Some(1)) || // 1-2-W, won on W=3
-                       (winning_t == t0 && t2.get_number_val() == Some(9)) {  // W-8-9, won on W=7
-                        fu += 2; wait_fu_added = true; break;
+                    if (winning_t == t2 && t0.get_number_val() == Some(1)) ||
+                       (winning_t == t0 && t2.get_number_val() == Some(9)) {
+                        fu += 2;
+                        break;
                     }
                     // If it's a Shuntsu and not Kanchan or Penchan, it's Ryanmen (0 fu for wait)
-                    // or a more complex wait that resolved into this Shuntsu.
-                    // For simplicity, if it's a sequence completion and not clearly Kanchan/Penchan, assume 0 wait fu.
-                    if !wait_fu_added { break; } // Assume Ryanmen or other 0-fu wait for this meld
+                    break; // Assume Ryanmen or other 0-fu wait for this meld
                 }
                 // If winning_tile completes a Koutsu, it's often a Shanpon wait (0 fu for wait itself, Koutsu gives meld fu)
                 // or was a Tanki on one of the pair that became a Koutsu (Tanki fu already handled if pair was the wait).
@@ -214,7 +201,7 @@ mod tests {
     // Helper to create a ParsedStandardHand for testing FuInput
     fn create_test_parsed_hand(pair_tile: Tile, melds_data: Vec<(HandParserMeldType, [Tile;3])>) -> ParsedStandardHand {
         let melds = melds_data.into_iter().map(|(mt, tiles_arr)| {
-            HandParserMeld {
+            ParsedMeld {
                 meld_type: mt,
                 tiles: tiles_arr,
                 is_concealed: true, // Assume concealed for parser output unless specified
@@ -241,7 +228,7 @@ mod tests {
             winning_tile: East,
             is_menzen_win: true,
             seat_wind: East, round_wind: East,
-            hand_before_win_completion: None,
+            _hand_before_win_completion: None,
         };
         // Base 20 + Menzen Ron 10 = 30 Fu. Pair is Yakuhai (Seat+Round) = +4. Total 34 -> 40 Fu.
         // Wait is Tanki on East = +2. Total 36 -> 40 Fu.
@@ -250,7 +237,7 @@ mod tests {
          let input_simple = FuCalculationInput {
             parsed_hand: &parsed_hand_simple, open_melds_declared: &[],
             win_type: WinType::Ron { winning_tile: Man7, discarder_seat: 1 }, winning_tile: Man7,
-            is_menzen_win: true, seat_wind: South, round_wind: East, hand_before_win_completion: None,
+            is_menzen_win: true, seat_wind: South, round_wind: East, _hand_before_win_completion: None,
         };
         // Base 20 + Menzen Ron 10 = 30. Pair Man7 (non-yakuhai) = 0. Wait Tanki on Man7 = +2. Total 32 -> 40 Fu.
         // The test above had Sou1,2,3 which are not in Sanma. Let's use Pin/Man only for a clean test.
@@ -264,7 +251,7 @@ mod tests {
         let input_sanma_simple = FuCalculationInput {
             parsed_hand: &parsed_hand_sanma_simple, open_melds_declared: &[],
             win_type: WinType::Ron { winning_tile: Man7, discarder_seat: 1 }, winning_tile: Man7,
-            is_menzen_win: true, seat_wind: South, round_wind: East, hand_before_win_completion: None,
+            is_menzen_win: true, seat_wind: South, round_wind: East, _hand_before_win_completion: None,
         };
         // Base 20 + Menzen Ron 10 = 30. Pair Man7 (non-yakuhai) = 0. Wait Tanki on Man7 = +2. Total 32 -> 40 Fu.
         assert_eq!(calculate_fu(&input_sanma_simple), 40, "Menzen Ron, simple pair, Tanki wait");
@@ -286,7 +273,7 @@ mod tests {
             winning_tile: Man7, // Assume Tsumo on pair completion
             is_menzen_win: true, // Tsumo is menzen for this test
             seat_wind: South, round_wind: East,
-            hand_before_win_completion: None,
+            _hand_before_win_completion: None,
         };
         // Base 20 + Tsumo 2 = 22. Ankou Man1 = +4. Pair Man7 = 0. Wait Tanki Man7 = +2.
         // Total = 22 + 4 + 2 = 28 -> 30 Fu.
@@ -304,7 +291,7 @@ mod tests {
         let input_dabuton = FuCalculationInput {
             parsed_hand: &parsed_hand_dabuton, open_melds_declared: &[],
             win_type: WinType::Tsumo, winning_tile: East, is_menzen_win: true,
-            seat_wind: East, round_wind: East, hand_before_win_completion: None,
+            seat_wind: East, round_wind: East, _hand_before_win_completion: None,
         };
         // Base 20 + Tsumo 2 = 22. DabuTon Pair East = +4. Wait Tanki East = +2. Total = 22+4+2 = 28 -> 30 Fu.
         assert_eq!(calculate_fu(&input_dabuton), 30, "DabuTon pair fu check");
@@ -314,7 +301,7 @@ mod tests {
         let input_dragon = FuCalculationInput {
             parsed_hand: &parsed_hand_dragon, open_melds_declared: &[],
             win_type: WinType::Tsumo, winning_tile: White, is_menzen_win: true,
-            seat_wind: South, round_wind: East, hand_before_win_completion: None,
+            seat_wind: South, round_wind: East, _hand_before_win_completion: None,
         };
         // Base 20 + Tsumo 2 = 22. Dragon Pair White = +2. Wait Tanki White = +2. Total = 22+2+2 = 26 -> 30 Fu.
         assert_eq!(calculate_fu(&input_dragon), 30, "Dragon pair fu check");
@@ -323,17 +310,17 @@ mod tests {
     #[test]
     fn test_meld_fu_ankou_minkou() {
         // Hand: Ankou Man1 (terminal), Minkou Pin2 (simple, from Pon), Seq, Seq, Pair Sou7
-        let ankou_meld = HandParserMeld { meld_type: HandParserMeldType::Koutsu, tiles: [Man1,Man1,Man1], is_concealed: true, representative_tile: Man1};
-        let seq1_meld = HandParserMeld { meld_type: HandParserMeldType::Shuntsu, tiles: [Man4,Man5,Man6], is_concealed: true, representative_tile: Man4};
-        let seq2_meld = HandParserMeld { meld_type: HandParserMeldType::Shuntsu, tiles: [Pin4,Pin5,Pin6], is_concealed: true, representative_tile: Pin4};
+        let ankou_meld = ParsedMeld { meld_type: HandParserMeldType::Koutsu, tiles: [Man1,Man1,Man1], is_concealed: true, representative_tile: Man1};
+        let seq1_meld = ParsedMeld { meld_type: HandParserMeldType::Shuntsu, tiles: [Man4,Man5,Man6], is_concealed: true, representative_tile: Man4};
+        let seq2_meld = ParsedMeld { meld_type: HandParserMeldType::Shuntsu, tiles: [Pin4,Pin5,Pin6], is_concealed: true, representative_tile: Pin4};
         // The Minkou (Pon) of Pin2 would be one of the 4 melds in ParsedStandardHand.
         // Let's say hand_parser identified it as a Koutsu [Pin2,Pin2,Pin2].
-        let minkou_as_parsed_koutsu = HandParserMeld { meld_type: HandParserMeldType::Koutsu, tiles: [Pin2,Pin2,Pin2], is_concealed: true, representative_tile: Pin2};
+        let minkou_as_parsed_koutsu = ParsedMeld { meld_type: HandParserMeldType::Koutsu, tiles: [Pin2,Pin2,Pin2], is_concealed: true, representative_tile: Pin2};
 
         let parsed_hand = ParsedStandardHand {
             pair: Sou7, // Not in Sanma, use Man7
             // melds: vec![ankou_meld, minkou_as_parsed_koutsu, seq1_meld, seq2_meld],
-            melds: vec![ankou_meld, minkou_as_parsed_koutsu, seq1_meld, HandParserMeld { meld_type: HandParserMeldType::Shuntsu, tiles: [Man7,Man8,Man9], is_concealed: true, representative_tile: Man7}],
+            melds: vec![ankou_meld, minkou_as_parsed_koutsu, seq1_meld, ParsedMeld { meld_type: HandParserMeldType::Shuntsu, tiles: [Man7,Man8,Man9], is_concealed: true, representative_tile: Man7}],
         };
          let open_melds = vec![
             DeclaredMeld { meld_type: DeclaredMeldType::Pon, tiles: [Pin2,Pin2,Pin2,Pin2], called_from_discarder_idx: Some(1), called_tile: Some(Pin2)}
@@ -345,7 +332,7 @@ mod tests {
             winning_tile: Man7,
             is_menzen_win: false, // Has an open Pon
             seat_wind: East, round_wind: East,
-            hand_before_win_completion: None,
+            _hand_before_win_completion: None,
         };
         // Base 20 (no menzen ron).
         // Ankou Man1 (terminal) = +8.
@@ -409,7 +396,7 @@ mod tests {
             parsed_hand: &dummy_parsed_hand, // This is not fully accurate for this test, but fu calc uses open_melds_declared for kans
             open_melds_declared: &open_melds_with_kans,
             win_type: WinType::Tsumo, winning_tile: Man7, is_menzen_win: false, // Open Minkan
-            seat_wind: East, round_wind: East, hand_before_win_completion: None,
+            seat_wind: East, round_wind: East, _hand_before_win_completion: None,
         };
         // Base 20 + Tsumo 2 = 22.
         // Ankan Man1 (T/H) = +32.
@@ -446,7 +433,7 @@ mod tests {
         let input_penchan = FuCalculationInput {
             parsed_hand: &parsed_penchan, open_melds_declared: &[],
             win_type: WinType::Ron{winning_tile: Man3, discarder_seat: 1}, winning_tile: Man3,
-            is_menzen_win: true, seat_wind: South, round_wind: East, hand_before_win_completion: None,
+            is_menzen_win: true, seat_wind: South, round_wind: East, _hand_before_win_completion: None,
         };
         // Base 20 + MenzenRon 10 = 30. Koutsu East (seat) = +2. Pair South (seat) = +2. Penchan Man3 = +2.
         // Total = 30 + Ankou East (seat+round) +8. Pair South (seat) +2. Penchan +2.
@@ -465,7 +452,7 @@ mod tests {
         let input_kanchan = FuCalculationInput {
             parsed_hand: &parsed_kanchan, open_melds_declared: &[],
             win_type: WinType::Ron{winning_tile: Man2, discarder_seat: 1}, winning_tile: Man2,
-            is_menzen_win: true, seat_wind: South, round_wind: East, hand_before_win_completion: None,
+            is_menzen_win: true, seat_wind: South, round_wind: East, _hand_before_win_completion: None,
         };
         // Same Fu components as above, just different wait type. Total 42 -> 50 Fu.
         assert_eq!(calculate_fu(&input_kanchan), 50, "Kanchan wait fu");
