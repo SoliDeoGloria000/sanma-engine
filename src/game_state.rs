@@ -1414,7 +1414,7 @@ fn count_daisangen_yaku(final_counts: &[u8;34], open_melds: &[DeclaredMeld], par
     let mut green_triplet = false;
     let mut red_triplet = false;
 
-    let check_triplet_or_quad = |tile: Tile, counts: &[u8;34], p_std: Option<&ParsedStandardHand>, o_melds: &[DeclaredMeld]| -> bool {
+    let check_triplet_or_quad = |tile: Tile, p_std: Option<&ParsedStandardHand>, o_melds: &[DeclaredMeld]| -> bool {
         // Check open melds first (Pon, Daiminkan, Shouminkan, Ankan)
         if o_melds.iter().any(|om| (matches!(om.meld_type, DeclaredMeldType::Pon | DeclaredMeldType::Ankan | DeclaredMeldType::Daiminkan | DeclaredMeldType::Shouminkan)) && om.tiles[0] == tile) {
             return true;
@@ -1433,9 +1433,9 @@ fn count_daisangen_yaku(final_counts: &[u8;34], open_melds: &[DeclaredMeld], par
         false
     };
     
-    if check_triplet_or_quad(Tile::White, final_counts, parsed_std_hand, open_melds) { white_triplet = true; }
-    if check_triplet_or_quad(Tile::Green, final_counts, parsed_std_hand, open_melds) { green_triplet = true; }
-    if check_triplet_or_quad(Tile::Red, final_counts, parsed_std_hand, open_melds) { red_triplet = true; }
+    if check_triplet_or_quad(Tile::White, parsed_std_hand, open_melds) { white_triplet = true; }
+    if check_triplet_or_quad(Tile::Green, parsed_std_hand, open_melds) { green_triplet = true; }
+    if check_triplet_or_quad(Tile::Red, parsed_std_hand, open_melds) { red_triplet = true; }
 
     if white_triplet && green_triplet && red_triplet { 13 } else { 0 }
 }
