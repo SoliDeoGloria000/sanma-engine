@@ -1,8 +1,8 @@
 // src/game_state.rs
 
 use crate::hand::{Hand, HandError};
-use crate::tiles::Tile;
-use crate::wall::Wall;
+use crate::tiles::{Tile, TileExt};
+use crate::wall::{Wall, DEAD_WALL_SIZE};
 use crate::hand_parser::{
     self, ParsedStandardHand, ParsedChiitoitsu, ParsedKokushiMusou,
     ParsedMeld as ParserOutputMeld, ParsedMeldType as ParserOutputMeldType
@@ -248,7 +248,7 @@ impl GameState {
         Ok(())
     }
 
-    fn void_transient_flags_on_call(&mut self, _action_player_idx: usize) {
+    fn void_transient_flags_on_call(&mut self, _action_player_idx: usize, discarder_idx_opt: Option<usize>) {
         // When any call (Pon, Chi, Daiminkan, Shouminkan - but not Ankan/Kita by the riichi player themselves if it doesn't change waits)
         // happens, Ippatsu is voided for ALL players.
         for i in 0..3 {
@@ -611,7 +611,7 @@ impl GameState {
     /// Common actions after any Kan/Kita declaration (reveal new dora for Kan, draw replacement tile).
     /// This should be called *after* the Kan/Kita meld is added to `open_melds`.
     pub fn perform_kan_common_actions(&mut self, kan_player_idx: usize) -> Option<Tile> {
-        self.void_transient_flags_on_call(kan_player_idx); // Calls can void ippatsu, etc.
+        self.void_transient_flags_on_call(kan_player_idx, None); // Calls can void ippatsu, etc.
         // Double Riichi eligibility void if not already in Riichi
         if !self.riichi_declared[kan_player_idx] { self.double_riichi_eligible[kan_player_idx] = false; }
 
@@ -1197,7 +1197,7 @@ impl GameState {
         points += self.riichi_sticks as u32 * 1000;
         points += self.honba_sticks as u32 * 300; // Each honba stick adds 300 to the payout
 
-        Score { han, fu, points, yaku_details }
+        Score { han, fu, points, yaku_details: yaku_list }
     }
 
     pub fn apply_score_transfers_and_reset_sticks(&mut self, winning_player_seat: usize, win_type: WinType, score_details: &Score) {
@@ -1348,54 +1348,8 @@ fn get_combined_hand_counts_internal(
 }
 
 
-// --- TileExt Trait (Helper for Yaku functions) ---
-trait TileExt {
-    fn is_manzu(&self) -> bool;
-    fn is_pinzu(&self) -> bool;
-    fn is_sou(&self) -> bool; // Even if some Sou are not in Sanma wall, the type exists
-    fn get_suit_char(&self) -> Option<char>;
-    // Add get_suit() if needed by yaku logic like in hand_parser
-    fn get_suit(&self) -> Option<u8>; // 0 for Man, 1 for Pin, 2 for Sou
-    fn get_number_val(&self) -> Option<u8>; // from Tile struct
-    fn is_suited_number(&self) -> bool; // from Tile struct
-    fn is_terminal(&self) -> bool; // from Tile struct
-    fn is_honor(&self) -> bool; // from Tile struct
-    fn is_terminal_or_honor(&self) -> bool; // from Tile struct
-    fn is_dragon(&self) -> bool; // from Tile struct
-    fn is_wind(&self) -> bool; // from Tile struct
-    fn next_in_series(&self) -> Tile; // from Tile struct
-    fn to_unicode_char(self) -> char; // from Tile struct
-
-}
-
-impl TileExt for Tile {
-    fn is_manzu(&self) -> bool { (*self as u8) <= (Tile::Man9 as u8) }
-    fn is_pinzu(&self) -> bool { (*self as u8) >= (Tile::Pin1 as u8) && (*self as u8) <= (Tile::Pin9 as u8)}
-    fn is_sou(&self) -> bool { (*self as u8) >= (Tile::Sou1 as u8) && (*self as u8) <= (Tile::Sou9 as u8)}
-    
-    fn get_suit_char(&self) -> Option<char> { // To align with hand_parser's TileExt if used
-        if self.is_manzu() { Some('m') }
-        else if self.is_pinzu() { Some('p') }
-        else if self.is_sou() { Some('s') }
-        else { None }
-    }
-    fn get_suit(&self) -> Option<u8> { // To align with hand_parser's TileExt if used
-        if self.is_manzu() { Some(0) }
-        else if self.is_pinzu() { Some(1) }
-        else if self.is_sou() { Some(2) }
-        else { None }
-    }
-    // Delegate to existing Tile methods for properties
-    fn get_number_val(&self) -> Option<u8> { Tile::get_number_val(*self) }
-    fn is_suited_number(&self) -> bool { Tile::is_suited_number(*self) }
-    fn is_terminal(&self) -> bool { Tile::is_terminal(*self) }
-    fn is_honor(&self) -> bool { Tile::is_honor(*self) }
-    fn is_terminal_or_honor(&self) -> bool { Tile::is_terminal_or_honor(*self) }
-    fn is_dragon(&self) -> bool { Tile::is_dragon(*self) }
-    fn is_wind(&self) -> bool { Tile::is_wind(*self) }
-    fn next_in_series(&self) -> Tile { Tile::next_in_series(*self) }
-    fn to_unicode_char(self) -> char { Tile::to_unicode(self) }
-}
+// TileExt trait moved to `tiles.rs` and made public so that other modules
+// (e.g. hand_parser) can use helper methods like `get_suit`.
 
 
 // --- Yaku Counting Functions ---
@@ -2243,7 +2197,7 @@ mod tests {
             // For tests, this is usually fine as we control input.
             // If Hand::add returns Result, unwrap_or_else is good.
             // Assuming Hand::add panics on >4, direct call is okay.
-            hand.add(tile); 
+            hand.add(tile).unwrap();
         }
         hand
     }
@@ -2271,7 +2225,7 @@ mod tests {
             for i in 0..3 {
                 gs.hands[i] = Hand::default(); // Clear default dealt hand
                 for &tile in hands_tiles[i] {
-                    gs.hands[i].add(tile); // Use the hand's add method
+                    gs.hands[i].add(tile).unwrap(); // Use the hand's add method
                 }
             }
         }
