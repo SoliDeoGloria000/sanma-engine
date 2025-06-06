@@ -425,195 +425,6 @@ impl Env {
         Ok((obs_py, reward, done, info))
     }
 
-    fn _populate_win_info(&self, info: &PyDict, winner_idx: usize, score: &Score, win_type: WinType) -> PyResult<()> {
-        info.set_item("winner", winner_idx)?;
-        info.set_item("win_type", format!("{:?}", win_type))?;
-        info.set_item("han", score.han)?;
-        info.set_item("fu", score.fu)?;
-        info.set_item("score_value_awarded", score.points)?;
-        let yaku_strs: Vec<String> = score.yaku_details.iter().map(|(name, val)| format!("{}: {} han", name, val)).collect();
-        info.set_item("yaku_list", yaku_strs)?;
-        Ok(())
-    }
-
-    fn _transition_to_waiting_for_calls(&mut self, discarded_tile: Tile, discarder_idx: usize) {
-        self.pending_call_options = self._get_call_options_for_discard(discarded_tile, discarder_idx);
-        if self.pending_call_options.is_empty() {
-            self.state.current_player_idx = ((discarder_idx + 1) % 3) as u8; // Corrected: ensure u8 type
-            if self.state.player_draws_tile().is_none() {
-                self.current_phase = GamePhase::PlayerTurnAction; // Or RoundOver if handled by main loop
-            } else {
-                self.current_phase = GamePhase::PlayerTurnAction;
-            }
-        } else {
-            self.state.current_player_idx = self.pending_call_options[0].0 as u8;
-            self.current_phase = GamePhase::WaitingForCalls;
-        }
-    }
-
-    fn _decode_action(&self, action_id: u8) -> Result<PlayerAction, String> {
-        match action_id {
-            id if (ACTION_ID_DISCARD_START..=ACTION_ID_DISCARD_END).contains(&id) => {
-                Tile::try_from(id - ACTION_ID_DISCARD_START).map(PlayerAction::Discard).map_err(|_| "Invalid tile ID for discard".to_string())
-            }
-            id if (ACTION_ID_RIICHI_DISCARD_START..=ACTION_ID_RIICHI_DISCARD_END).contains(&id) => {
-                Tile::try_from(id - ACTION_ID_RIICHI_DISCARD_START).map(PlayerAction::RiichiDeclare).map_err(|_| "Invalid tile ID for Riichi discard".to_string())
-            }
-            id if (ACTION_ID_ANKAN_START..=ACTION_ID_ANKAN_END).contains(&id) => {
-                Tile::try_from(id - ACTION_ID_ANKAN_START).map(PlayerAction::Ankan).map_err(|_| "Invalid tile ID for Ankan".to_string())
-            }
-            id if (ACTION_ID_SHOUMINKAN_START..=ACTION_ID_SHOUMINKAN_END).contains(&id) => {
-                Tile::try_from(id - ACTION_ID_SHOUMINKAN_START).map(PlayerAction::Shouminkan).map_err(|_| "Invalid tile ID for Shouminkan".to_string())
-            }
-            ACTION_ID_KITA => Ok(PlayerAction::Kita),
-            ACTION_ID_TSUMO_AGARI => Ok(PlayerAction::TsumoAgari),
-            ACTION_ID_RON_AGARI => Ok(PlayerAction::RonAgari),
-            ACTION_ID_PON => {
-                let (tile, _) = self.state.last_discarded_tile_info.ok_or_else(|| "Cannot decode Pon: No last discarded tile info".to_string())?;
-                Ok(PlayerAction::Pon(tile))
-            }
-            ACTION_ID_DAIMINKAN => {
-                let (tile, _) = self.state.last_discarded_tile_info.ok_or_else(|| "Cannot decode Daiminkan: No last discarded tile info".to_string())?;
-                Ok(PlayerAction::Daiminkan(tile))
-            }
-            ACTION_ID_PASS => Ok(PlayerAction::Pass),
-            _ => Err(format!("Unmapped action_id: {}", action_id)),
-        }
-    }
-
-    fn _player_action_to_id(&self, action: PlayerAction) -> Option<u8> {
-        match action {
-            PlayerAction::Discard(tile) => Some(ACTION_ID_DISCARD_START + tile as u8),
-            PlayerAction::RiichiDeclare(tile) => Some(ACTION_ID_RIICHI_DISCARD_START + tile as u8),
-            PlayerAction::Ankan(tile) => Some(ACTION_ID_ANKAN_START + tile as u8),
-            PlayerAction::Shouminkan(tile) => Some(ACTION_ID_SHOUMINKAN_START + tile as u8),
-            PlayerAction::Kita => Some(ACTION_ID_KITA),
-            PlayerAction::TsumoAgari => Some(ACTION_ID_TSUMO_AGARI),
-            PlayerAction::RonAgari => Some(ACTION_ID_RON_AGARI),
-            PlayerAction::Pon(_) => Some(ACTION_ID_PON),
-            PlayerAction::Daiminkan(_) => Some(ACTION_ID_DAIMINKAN),
-            PlayerAction::Pass => Some(ACTION_ID_PASS),
-        }
-    }
-
-    fn _get_obs_and_legal_actions<'py>(&self, py: Python<'py>) -> (Py<PyArray<u8, Ix3>>, Py<PyArray1<bool>>) {
-        let obs_array = PyArray::zeros(py, OBS_SHAPE, false);
-        // TODO: Populate obs_array based on self.state and OBS_SHAPE definition
-
-        let mut legal_actions_vec = vec![false; ACTION_SPACE_SIZE];
-        let player_idx = self.state.current_player_idx as usize;
-
-        match self.current_phase {
-            GamePhase::PlayerTurnAction => {
-                for (tile_in_hand, _count) in self.state.hands[player_idx].iter() {
-                     if let Some(id) = self._player_action_to_id(PlayerAction::Discard(tile_in_hand)) {
-                        if (id as usize) < ACTION_SPACE_SIZE { legal_actions_vec[id as usize] = true; }
-                    }
-                }
-                if self.state.can_declare_riichi(player_idx) {
-                    for (tile_in_hand, _count) in self.state.hands[player_idx].iter() {
-                        if let Some(id) = self._player_action_to_id(PlayerAction::RiichiDeclare(tile_in_hand)) {
-                                if (id as usize) < ACTION_SPACE_SIZE { legal_actions_vec[id as usize] = true; }
-                        }
-                    }
-                }
-                if let Some(possible_ankans) = self.state.get_possible_ankans(player_idx) {
-                    for tile in possible_ankans {
-                        if let Some(id) = self._player_action_to_id(PlayerAction::Ankan(tile)) {
-                             if (id as usize) < ACTION_SPACE_SIZE { legal_actions_vec[id as usize] = true; }
-                        }
-                    }
-                }
-                 if let Some(possible_shouminkans) = self.state.get_possible_shouminkans(player_idx) {
-                    for tile in possible_shouminkans {
-                        if let Some(id) = self._player_action_to_id(PlayerAction::Shouminkan(tile)) {
-                             if (id as usize) < ACTION_SPACE_SIZE { legal_actions_vec[id as usize] = true; }
-                        }
-                    }
-                }
-                if self.state.can_declare_kita_action(player_idx) {
-                    if let Some(id) = self._player_action_to_id(PlayerAction::Kita) {
-                         if (id as usize) < ACTION_SPACE_SIZE { legal_actions_vec[id as usize] = true; }
-                    }
-                }
-                if self.state.check_tsumo() {
-                    if let Some(id) = self._player_action_to_id(PlayerAction::TsumoAgari) {
-                         if (id as usize) < ACTION_SPACE_SIZE { legal_actions_vec[id as usize] = true; }
-                    }
-                }
-            }
-            GamePhase::WaitingForCalls | GamePhase::ProcessingShouminkanChankan => {
-                if let Some((_p_idx_opt, actions)) = self.pending_call_options.iter().find(|(p_idx_in_list, _)| *p_idx_in_list == player_idx) {
-                    for action in actions {
-                        if let Some(id) = self._player_action_to_id(*action) {
-                                if (id as usize) < ACTION_SPACE_SIZE { legal_actions_vec[id as usize] = true; }
-                        }
-                    }
-                }
-                if let Some(id) = self._player_action_to_id(PlayerAction::Pass) {
-                     if (id as usize) < ACTION_SPACE_SIZE { legal_actions_vec[id as usize] = true; }
-                }
-            }
-            GamePhase::PlayerTurnDraw => {
-                 if let Some(id) = self._player_action_to_id(PlayerAction::Pass) {
-                     if (id as usize) < ACTION_SPACE_SIZE { legal_actions_vec[id as usize] = true; }
-                }
-            }
-            GamePhase::RoundOver => {
-                if let Some(id) = self._player_action_to_id(PlayerAction::Pass) {
-                     if (id as usize) < ACTION_SPACE_SIZE { legal_actions_vec[id as usize] = true; }
-                }
-            }
-        }
-        if legal_actions_vec.iter().all(|&x| !x) && self.current_phase != GamePhase::RoundOver {
-            if let Some(id) = self._player_action_to_id(PlayerAction::Pass) {
-                 if (id as usize) < ACTION_SPACE_SIZE { legal_actions_vec[id as usize] = true; }
-            }
-        }
-
-        let legal_actions_pyarray = PyArray1::from_vec(py, legal_actions_vec);
-        (obs_array.to_owned(), legal_actions_pyarray.to_owned())
-    }
-
-    fn _get_call_options_for_discard(&self, discarded_tile: Tile, discarder_idx: usize) -> Vec<(usize, Vec<PlayerAction>)> {
-        let mut all_options: Vec<(usize, Vec<PlayerAction>)> = Vec::new();
-        for p_idx_offset in 1..3 {
-            let p_idx = (discarder_idx + p_idx_offset) % 3;
-            let mut player_specific_options = Vec::new();
-            if self.state.can_call_ron(p_idx, discarded_tile, discarder_idx) { player_specific_options.push(PlayerAction::RonAgari); }
-            if self.state.can_call_daiminkan(p_idx, discarded_tile, discarder_idx) { player_specific_options.push(PlayerAction::Daiminkan(discarded_tile)); }
-            if self.state.can_call_pon(p_idx, discarded_tile, discarder_idx) { player_specific_options.push(PlayerAction::Pon(discarded_tile)); }
-            if !player_specific_options.is_empty() { all_options.push((p_idx, player_specific_options)); }
-        }
-        all_options.sort_by(|(p_idx_a, actions_a), (p_idx_b, actions_b)| {
-            let prio_a = actions_a.iter().any(|a| matches!(a, PlayerAction::RonAgari));
-            let prio_b = actions_b.iter().any(|a| matches!(a, PlayerAction::RonAgari));
-            if prio_a != prio_b { return prio_b.cmp(&prio_a); }
-            let kan_a = actions_a.iter().any(|a| matches!(a, PlayerAction::Daiminkan(_)));
-            let kan_b = actions_b.iter().any(|a| matches!(a, PlayerAction::Daiminkan(_)));
-            if kan_a != kan_b { return kan_b.cmp(&kan_a); }
-            let order_a = (p_idx_a + 3 - discarder_idx) % 3;
-            let order_b = (p_idx_b + 3 - discarder_idx) % 3;
-            order_a.cmp(&order_b)
-        });
-        all_options
-    }
-
-    fn _get_chankan_options(&self, chankan_tile: Tile, shouminkan_declarer_idx: usize) -> Vec<(usize, Vec<PlayerAction>)> {
-        let mut chankan_options = Vec::new();
-         for p_idx in 0..3 {
-            if p_idx == shouminkan_declarer_idx { continue; }
-            if self.state.can_call_ron(p_idx, chankan_tile, shouminkan_declarer_idx) {
-                chankan_options.push((p_idx, vec![PlayerAction::RonAgari]));
-            }
-        }
-        chankan_options.sort_by(|(p_idx_a, _), (p_idx_b, _)| {
-            let order_a = (p_idx_a + 3 - shouminkan_declarer_idx) % 3;
-            let order_b = (p_idx_b + 3 - shouminkan_declarer_idx) % 3;
-            order_a.cmp(&order_b)
-        });
-        chankan_options
-    }
 
     fn current_player_idx_py(&self) -> usize { self.state.current_player_idx as usize }
 
@@ -660,6 +471,275 @@ impl Env {
         Ok(self.state.discards[player_idx].iter().map(|t| Tile::to_unicode(*t).to_string()).collect::<Vec<String>>().join(" "))
     }
 } // <<< This should be the closing brace for `impl Env`
+
+impl Env {
+    fn _populate_win_info(&self, info: &PyDict, winner_idx: usize, score: &Score, win_type: WinType) -> PyResult<()> {
+        info.set_item("winner", winner_idx)?;
+        info.set_item("win_type", format!("{:?}", win_type))?;
+        info.set_item("han", score.han)?;
+        info.set_item("fu", score.fu)?;
+        info.set_item("score_value_awarded", score.points)?;
+        let yaku_strs: Vec<String> = score
+            .yaku_details
+            .iter()
+            .map(|(name, val)| format!("{}: {} han", name, val))
+            .collect();
+        info.set_item("yaku_list", yaku_strs)?;
+        Ok(())
+    }
+
+    fn _transition_to_waiting_for_calls(&mut self, discarded_tile: Tile, discarder_idx: usize) {
+        self.pending_call_options = self._get_call_options_for_discard(discarded_tile, discarder_idx);
+        if self.pending_call_options.is_empty() {
+            self.state.current_player_idx = ((discarder_idx + 1) % 3) as u8;
+            if self.state.player_draws_tile().is_none() {
+                self.current_phase = GamePhase::PlayerTurnAction;
+            } else {
+                self.current_phase = GamePhase::PlayerTurnAction;
+            }
+        } else {
+            self.state.current_player_idx = self.pending_call_options[0].0 as u8;
+            self.current_phase = GamePhase::WaitingForCalls;
+        }
+    }
+
+    fn _decode_action(&self, action_id: u8) -> Result<PlayerAction, String> {
+        match action_id {
+            id if (ACTION_ID_DISCARD_START..=ACTION_ID_DISCARD_END).contains(&id) => {
+                Tile::try_from(id - ACTION_ID_DISCARD_START)
+                    .map(PlayerAction::Discard)
+                    .map_err(|_| "Invalid tile ID for discard".to_string())
+            }
+            id if (ACTION_ID_RIICHI_DISCARD_START..=ACTION_ID_RIICHI_DISCARD_END).contains(&id) => {
+                Tile::try_from(id - ACTION_ID_RIICHI_DISCARD_START)
+                    .map(PlayerAction::RiichiDeclare)
+                    .map_err(|_| "Invalid tile ID for Riichi discard".to_string())
+            }
+            id if (ACTION_ID_ANKAN_START..=ACTION_ID_ANKAN_END).contains(&id) => {
+                Tile::try_from(id - ACTION_ID_ANKAN_START)
+                    .map(PlayerAction::Ankan)
+                    .map_err(|_| "Invalid tile ID for Ankan".to_string())
+            }
+            id if (ACTION_ID_SHOUMINKAN_START..=ACTION_ID_SHOUMINKAN_END).contains(&id) => {
+                Tile::try_from(id - ACTION_ID_SHOUMINKAN_START)
+                    .map(PlayerAction::Shouminkan)
+                    .map_err(|_| "Invalid tile ID for Shouminkan".to_string())
+            }
+            ACTION_ID_KITA => Ok(PlayerAction::Kita),
+            ACTION_ID_TSUMO_AGARI => Ok(PlayerAction::TsumoAgari),
+            ACTION_ID_RON_AGARI => Ok(PlayerAction::RonAgari),
+            ACTION_ID_PON => {
+                let (tile, _) = self
+                    .state
+                    .last_discarded_tile_info
+                    .ok_or_else(|| "Cannot decode Pon: No last discarded tile info".to_string())?;
+                Ok(PlayerAction::Pon(tile))
+            }
+            ACTION_ID_DAIMINKAN => {
+                let (tile, _) = self
+                    .state
+                    .last_discarded_tile_info
+                    .ok_or_else(|| "Cannot decode Daiminkan: No last discarded tile info".to_string())?;
+                Ok(PlayerAction::Daiminkan(tile))
+            }
+            ACTION_ID_PASS => Ok(PlayerAction::Pass),
+            _ => Err(format!("Unmapped action_id: {}", action_id)),
+        }
+    }
+
+    fn _player_action_to_id(&self, action: PlayerAction) -> Option<u8> {
+        match action {
+            PlayerAction::Discard(tile) => Some(ACTION_ID_DISCARD_START + tile as u8),
+            PlayerAction::RiichiDeclare(tile) => Some(ACTION_ID_RIICHI_DISCARD_START + tile as u8),
+            PlayerAction::Ankan(tile) => Some(ACTION_ID_ANKAN_START + tile as u8),
+            PlayerAction::Shouminkan(tile) => Some(ACTION_ID_SHOUMINKAN_START + tile as u8),
+            PlayerAction::Kita => Some(ACTION_ID_KITA),
+            PlayerAction::TsumoAgari => Some(ACTION_ID_TSUMO_AGARI),
+            PlayerAction::RonAgari => Some(ACTION_ID_RON_AGARI),
+            PlayerAction::Pon(_) => Some(ACTION_ID_PON),
+            PlayerAction::Daiminkan(_) => Some(ACTION_ID_DAIMINKAN),
+            PlayerAction::Pass => Some(ACTION_ID_PASS),
+        }
+    }
+
+    fn _get_obs_and_legal_actions<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> (Py<PyArray<u8, Ix3>>, Py<PyArray1<bool>>) {
+        let obs_array = PyArray::zeros(py, OBS_SHAPE, false);
+
+        // TODO: Populate obs_array based on self.state and OBS_SHAPE definition
+        let mut legal_actions_vec = vec![false; ACTION_SPACE_SIZE];
+        let player_idx = self.state.current_player_idx as usize;
+
+        match self.current_phase {
+            GamePhase::PlayerTurnAction => {
+                for (tile_in_hand, _count) in self.state.hands[player_idx].iter() {
+                    if let Some(id) = self._player_action_to_id(PlayerAction::Discard(tile_in_hand)) {
+                        if (id as usize) < ACTION_SPACE_SIZE {
+                            legal_actions_vec[id as usize] = true;
+                        }
+                    }
+                }
+                if self.state.can_declare_riichi(player_idx) {
+                    for (tile_in_hand, _count) in self.state.hands[player_idx].iter() {
+                        if let Some(id) =
+                            self._player_action_to_id(PlayerAction::RiichiDeclare(tile_in_hand))
+                        {
+                            if (id as usize) < ACTION_SPACE_SIZE {
+                                legal_actions_vec[id as usize] = true;
+                            }
+                        }
+                    }
+                }
+                if let Some(possible_ankans) = self.state.get_possible_ankans(player_idx) {
+                    for tile in possible_ankans {
+                        if let Some(id) = self._player_action_to_id(PlayerAction::Ankan(tile)) {
+                            if (id as usize) < ACTION_SPACE_SIZE {
+                                legal_actions_vec[id as usize] = true;
+                            }
+                        }
+                    }
+                }
+                if let Some(possible_shouminkans) = self.state.get_possible_shouminkans(player_idx) {
+                    for tile in possible_shouminkans {
+                        if let Some(id) = self._player_action_to_id(PlayerAction::Shouminkan(tile)) {
+                            if (id as usize) < ACTION_SPACE_SIZE {
+                                legal_actions_vec[id as usize] = true;
+                            }
+                        }
+                    }
+                }
+                if self.state.can_declare_kita_action(player_idx) {
+                    if let Some(id) = self._player_action_to_id(PlayerAction::Kita) {
+                        if (id as usize) < ACTION_SPACE_SIZE {
+                            legal_actions_vec[id as usize] = true;
+                        }
+                    }
+                }
+                if self.state.check_tsumo() {
+                    if let Some(id) = self._player_action_to_id(PlayerAction::TsumoAgari) {
+                        if (id as usize) < ACTION_SPACE_SIZE {
+                            legal_actions_vec[id as usize] = true;
+                        }
+                    }
+                }
+            }
+            GamePhase::WaitingForCalls | GamePhase::ProcessingShouminkanChankan => {
+                if let Some((_p_idx_opt, actions)) =
+                    self.pending_call_options
+                        .iter()
+                        .find(|(p_idx_in_list, _)| *p_idx_in_list == player_idx)
+                {
+                    for action in actions {
+                        if let Some(id) = self._player_action_to_id(*action) {
+                            if (id as usize) < ACTION_SPACE_SIZE {
+                                legal_actions_vec[id as usize] = true;
+                            }
+                        }
+                    }
+                }
+                if let Some(id) = self._player_action_to_id(PlayerAction::Pass) {
+                    if (id as usize) < ACTION_SPACE_SIZE {
+                        legal_actions_vec[id as usize] = true;
+                    }
+                }
+            }
+            GamePhase::PlayerTurnDraw => {
+                if let Some(id) = self._player_action_to_id(PlayerAction::Pass) {
+                    if (id as usize) < ACTION_SPACE_SIZE {
+                        legal_actions_vec[id as usize] = true;
+                    }
+                }
+            }
+            GamePhase::RoundOver => {
+                if let Some(id) = self._player_action_to_id(PlayerAction::Pass) {
+                    if (id as usize) < ACTION_SPACE_SIZE {
+                        legal_actions_vec[id as usize] = true;
+                    }
+                }
+            }
+        }
+        if legal_actions_vec.iter().all(|&x| !x) && self.current_phase != GamePhase::RoundOver {
+            if let Some(id) = self._player_action_to_id(PlayerAction::Pass) {
+                if (id as usize) < ACTION_SPACE_SIZE {
+                    legal_actions_vec[id as usize] = true;
+                }
+            }
+        }
+
+        let legal_actions_pyarray = PyArray1::from_vec(py, legal_actions_vec);
+        (obs_array.to_owned(), legal_actions_pyarray.to_owned())
+    }
+
+    fn _get_call_options_for_discard(
+        &self,
+        discarded_tile: Tile,
+        discarder_idx: usize,
+    ) -> Vec<(usize, Vec<PlayerAction>)> {
+        let mut all_options: Vec<(usize, Vec<PlayerAction>)> = Vec::new();
+        for p_idx_offset in 1..3 {
+            let p_idx = (discarder_idx + p_idx_offset) % 3;
+            let mut player_specific_options = Vec::new();
+            if self.state.can_call_ron(p_idx, discarded_tile, discarder_idx) {
+                player_specific_options.push(PlayerAction::RonAgari);
+            }
+            if self
+                .state
+                .can_call_daiminkan(p_idx, discarded_tile, discarder_idx)
+            {
+                player_specific_options.push(PlayerAction::Daiminkan(discarded_tile));
+            }
+            if self.state.can_call_pon(p_idx, discarded_tile, discarder_idx) {
+                player_specific_options.push(PlayerAction::Pon(discarded_tile));
+            }
+            if !player_specific_options.is_empty() {
+                all_options.push((p_idx, player_specific_options));
+            }
+        }
+        all_options.sort_by(|(p_idx_a, actions_a), (p_idx_b, actions_b)| {
+            let prio_a = actions_a.iter().any(|a| matches!(a, PlayerAction::RonAgari));
+            let prio_b = actions_b.iter().any(|a| matches!(a, PlayerAction::RonAgari));
+            if prio_a != prio_b {
+                return prio_b.cmp(&prio_a);
+            }
+            let kan_a = actions_a.iter().any(|a| matches!(a, PlayerAction::Daiminkan(_)));
+            let kan_b = actions_b.iter().any(|a| matches!(a, PlayerAction::Daiminkan(_)));
+            if kan_a != kan_b {
+                return kan_b.cmp(&kan_a);
+            }
+            let order_a = (p_idx_a + 3 - discarder_idx) % 3;
+            let order_b = (p_idx_b + 3 - discarder_idx) % 3;
+            order_a.cmp(&order_b)
+        });
+        all_options
+    }
+
+    fn _get_chankan_options(
+        &self,
+        chankan_tile: Tile,
+        shouminkan_declarer_idx: usize,
+    ) -> Vec<(usize, Vec<PlayerAction>)> {
+        let mut chankan_options = Vec::new();
+        for p_idx in 0..3 {
+            if p_idx == shouminkan_declarer_idx {
+                continue;
+            }
+            if self
+                .state
+                .can_call_ron(p_idx, chankan_tile, shouminkan_declarer_idx)
+            {
+                chankan_options.push((p_idx, vec![PlayerAction::RonAgari]));
+            }
+        }
+        chankan_options.sort_by(|(p_idx_a, _), (p_idx_b, _)| {
+            let order_a = (p_idx_a + 3 - shouminkan_declarer_idx) % 3;
+            let order_b = (p_idx_b + 3 - shouminkan_declarer_idx) % 3;
+            order_a.cmp(&order_b)
+        });
+        chankan_options
+    }
+}
 
 #[pymodule]
 fn sanma_engine(_py: Python, m: &PyModule) -> PyResult<()> {
