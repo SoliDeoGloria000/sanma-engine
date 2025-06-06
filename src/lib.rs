@@ -1,5 +1,6 @@
 // src/lib.rs
 use pyo3::prelude::*;
+use pyo3::Bound;
 use numpy::{PyArray, PyArray1, Ix3};
 use pyo3::types::PyDict;
 use pyo3::exceptions::{PyValueError, PyIndexError};
@@ -745,7 +746,7 @@ impl Env {
 }
 
 #[pymodule]
-fn sanma_engine(_py: Python, m: &PyModule) -> PyResult<()> {
+fn sanma_engine(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Env>()?;
     Ok(())
 }
