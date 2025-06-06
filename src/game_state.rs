@@ -1183,7 +1183,7 @@ impl GameState {
                     is_menzen_win: menzen,
                     seat_wind: self.seat_winds[winning_player_seat],
                     round_wind: self.round_wind,
-                    hand_before_win_completion: None, // TODO: Consider providing for more accurate wait Fu
+                    _hand_before_win_completion: None, // TODO: Consider providing for more accurate wait Fu
                 };
                 fu_calculation::calculate_fu(&fu_input)
             }
@@ -2186,6 +2186,7 @@ mod tests {
     use crate::hand::Hand;
     use crate::hand_parser;
     use crate::game_state::{WinType, DeclaredMeldType, Score, DeclaredMeld}; // Explicitly import
+    use crate::wall::DEAD_WALL_SIZE;
 
     // --- Helper Functions ---
 
