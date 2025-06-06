@@ -131,12 +131,15 @@ impl Env {
 
         let mut reward = 0.0;
         let mut done = false;
-        let info = PyDict::new(py);
+        // Create a Python dictionary to return additional info to the caller
+        // `PyDict::new_bound` returns a bound reference which we convert into
+        // an owned `Py<PyDict>` so it matches the return type of this method.
+        let info = PyDict::new_bound(py).unbind();
 
         if self.current_phase == GamePhase::RoundOver {
-            info.set_item("status", "RoundOver, please reset")?;
+            info.bind(py).set_item("status", "RoundOver, please reset")?;
             let (obs_py, legal_actions_py) = self._get_obs_and_legal_actions(py);
-            info.set_item("legal_actions_mask", legal_actions_py)?;
+            info.bind(py).set_item("legal_actions_mask", legal_actions_py)?;
             return Ok((obs_py, reward, true, info));
         }
 
@@ -170,7 +173,7 @@ impl Env {
                                 if score.han > 0 {
                                     self.state.apply_score_transfers_and_reset_sticks(current_player, WinType::Tsumo, &score);
                                     reward = score.points as f32; done = true; self.current_phase = GamePhase::RoundOver;
-                                    self._populate_win_info(info, current_player, &score, WinType::Tsumo)?;
+                                    self._populate_win_info(info.bind(py).as_gil_ref(), current_player, &score, WinType::Tsumo)?;
                                 }
                             } else {
                                 self.current_phase = GamePhase::PlayerTurnAction;
@@ -189,7 +192,7 @@ impl Env {
                                      if score.han > 0 {
                                         self.state.apply_score_transfers_and_reset_sticks(current_player, WinType::Tsumo, &score);
                                         reward = score.points as f32; done = true; self.current_phase = GamePhase::RoundOver;
-                                        self._populate_win_info(info, current_player, &score, WinType::Tsumo)?;
+                                        self._populate_win_info(info.bind(py).as_gil_ref(), current_player, &score, WinType::Tsumo)?;
                                      }
                                 } else {
                                     self.current_phase = GamePhase::PlayerTurnAction;
@@ -209,7 +212,7 @@ impl Env {
                                  if score.han > 0 {
                                     self.state.apply_score_transfers_and_reset_sticks(current_player, WinType::Tsumo, &score);
                                     reward = score.points as f32; done = true; self.current_phase = GamePhase::RoundOver;
-                                    self._populate_win_info(info, current_player, &score, WinType::Tsumo)?;
+                                    self._populate_win_info(info.bind(py).as_gil_ref(), current_player, &score, WinType::Tsumo)?;
                                  }
                             } else {
                                 self.current_phase = GamePhase::PlayerTurnAction;
@@ -222,7 +225,7 @@ impl Env {
                             if score.han > 0 {
                                 self.state.apply_score_transfers_and_reset_sticks(current_player, WinType::Tsumo, &score);
                                 reward = score.points as f32; done = true; self.current_phase = GamePhase::RoundOver;
-                                self._populate_win_info(info, current_player, &score, WinType::Tsumo)?;
+                                self._populate_win_info(info.bind(py).as_gil_ref(), current_player, &score, WinType::Tsumo)?;
                             } else {
                                 return Err(PyValueError::new_err("Tsumo Agari claimed but no Yaku found"));
                             }
@@ -243,7 +246,7 @@ impl Env {
                             if score.han > 0 {
                                 self.state.apply_score_transfers_and_reset_sticks(acting_player_idx, WinType::Ron { winning_tile: discarded_tile, discarder_seat: discarder_idx }, &score);
                                 reward = score.points as f32; done = true; self.current_phase = GamePhase::RoundOver;
-                                self._populate_win_info(info, acting_player_idx, &score, WinType::Ron { winning_tile: discarded_tile, discarder_seat: discarder_idx })?;
+                                self._populate_win_info(info.bind(py).as_gil_ref(), acting_player_idx, &score, WinType::Ron { winning_tile: discarded_tile, discarder_seat: discarder_idx })?;
                             } else { return Err(PyValueError::new_err("RonAgari claimed but no Yaku found")); }
                         } else { return Err(PyValueError::new_err("Invalid RonAgari claim (conditions not met)")); }
                     }
@@ -265,7 +268,7 @@ impl Env {
                                      if score.han > 0 {
                                         self.state.apply_score_transfers_and_reset_sticks(acting_player_idx, WinType::Tsumo, &score);
                                         reward = score.points as f32; done = true; self.current_phase = GamePhase::RoundOver;
-                                        self._populate_win_info(info, acting_player_idx, &score, WinType::Tsumo)?;
+                                        self._populate_win_info(info.bind(py).as_gil_ref(), acting_player_idx, &score, WinType::Tsumo)?;
                                      }
                                 } else {
                                     self.current_phase = GamePhase::PlayerTurnAction;
@@ -301,7 +304,7 @@ impl Env {
                             if score.han > 0 {
                                 self.state.apply_score_transfers_and_reset_sticks(acting_player_idx, WinType::Ron { winning_tile: chankan_tile, discarder_seat: shouminkan_declarer_idx }, &score);
                                 reward = score.points as f32; done = true; self.current_phase = GamePhase::RoundOver;
-                                self._populate_win_info(info, acting_player_idx, &score, WinType::Ron { winning_tile: chankan_tile, discarder_seat: shouminkan_declarer_idx })?;
+                                self._populate_win_info(info.bind(py).as_gil_ref(), acting_player_idx, &score, WinType::Ron { winning_tile: chankan_tile, discarder_seat: shouminkan_declarer_idx })?;
                             } else { return Err(PyValueError::new_err("Chankan RonAgari claimed but no Yaku found")); }
                         } else { return Err(PyValueError::new_err("Invalid Chankan RonAgari claim")); }
                     }
@@ -316,7 +319,7 @@ impl Env {
                                  if score.han > 0 {
                                     self.state.apply_score_transfers_and_reset_sticks(kan_player, WinType::Tsumo, &score);
                                     reward = score.points as f32; done = true; self.current_phase = GamePhase::RoundOver;
-                                    self._populate_win_info(info, kan_player, &score, WinType::Tsumo)?;
+                                    self._populate_win_info(info.bind(py).as_gil_ref(), kan_player, &score, WinType::Tsumo)?;
                                  }
                             } else {
                                 self.current_phase = GamePhase::PlayerTurnAction;
@@ -346,7 +349,7 @@ impl Env {
                self.current_phase == GamePhase::WaitingForCalls && 
                self.pending_call_options.iter().all(|(_, actions)| !actions.iter().any(|a| matches!(a, PlayerAction::RonAgari)))
             {
-                info.set_item("draw_type", "four_kan_abortive")?;
+                info.bind(py).set_item("draw_type", "four_kan_abortive")?;
                 done = true; self.current_phase = GamePhase::RoundOver;
             }
 
@@ -372,16 +375,16 @@ impl Env {
                 }
 
                 if let Some(winner_idx) = nagashi_mangan_achieved_by {
-                    info.set_item("draw_type", "nagashi_mangan")?;
-                    info.set_item("nagashi_mangan_winner", winner_idx)?;
+                    info.bind(py).set_item("draw_type", "nagashi_mangan")?;
+                    info.bind(py).set_item("nagashi_mangan_winner", winner_idx)?;
                     let is_dealer = winner_idx == self.state.dealer_idx as usize;
                     let mut mangan_value = if is_dealer { 12000 } else { 8000 };
                     mangan_value += self.state.honba_sticks as u32 * 300;
                     let collected_riichi_value = self.state.riichi_sticks as u32 * 1000;
                     self.state.player_scores[winner_idx] += collected_riichi_value as i32;
                     self.state.riichi_sticks = 0;
-                    info.set_item("nagashi_mangan_total_payout", mangan_value)?;
-                    info.set_item("collected_riichi_sticks_value", collected_riichi_value)?;
+                    info.bind(py).set_item("nagashi_mangan_total_payout", mangan_value)?;
+                    info.bind(py).set_item("collected_riichi_sticks_value", collected_riichi_value)?;
                     self.state.player_scores[winner_idx] += mangan_value as i32;
                     if is_dealer {
                         let payment_from_each_non_dealer = mangan_value / 2;
@@ -394,10 +397,10 @@ impl Env {
                             else if i != winner_idx && i != self.state.dealer_idx as usize { self.state.player_scores[i] -= payment_from_other_non_dealer as i32; }
                         }
                     }
-                    for p_idx_info in 0..3 { info.set_item(format!("player_{}_score_after_nagashi", p_idx_info), self.state.player_scores[p_idx_info])?; }
+                    for p_idx_info in 0..3 { info.bind(py).set_item(format!("player_{}_score_after_nagashi", p_idx_info), self.state.player_scores[p_idx_info])?; }
                     reward = mangan_value as f32;
                 } else {
-                    info.set_item("draw_type", "exhaustive_draw_ryuukyoku")?;
+                    info.bind(py).set_item("draw_type", "exhaustive_draw_ryuukyoku")?;
                 }
                 done = true;
                 self.current_phase = GamePhase::RoundOver;
@@ -405,21 +408,21 @@ impl Env {
         }
 
         let (obs_py, legal_actions_py) = self._get_obs_and_legal_actions(py);
-        info.set_item("legal_actions_mask", legal_actions_py)?;
-        info.set_item("current_phase", format!("{:?}", self.current_phase))?;
-        info.set_item("current_player_for_action", self.state.current_player_idx)?;
+        info.bind(py).set_item("legal_actions_mask", legal_actions_py)?;
+        info.bind(py).set_item("current_phase", format!("{:?}", self.current_phase))?;
+        info.bind(py).set_item("current_player_for_action", self.state.current_player_idx)?;
         if let Some((last_discard_tile, last_discarder)) = self.state.last_discarded_tile_info {
-            info.set_item("last_discarded_tile_val", last_discard_tile as u8)?;
-            info.set_item("last_discarder_idx", last_discarder)?;
+            info.bind(py).set_item("last_discarded_tile_val", last_discard_tile as u8)?;
+            info.bind(py).set_item("last_discarder_idx", last_discarder)?;
         }
          if let Some(last_drawn_tile) = self.state.last_drawn_tile {
-            info.set_item("last_drawn_tile_for_current_player_val", last_drawn_tile as u8)?;
+            info.bind(py).set_item("last_drawn_tile_for_current_player_val", last_drawn_tile as u8)?;
         }
-        info.set_item("riichi_sticks_on_table", self.state.riichi_sticks)?;
-        info.set_item("honba_sticks_active", self.state.honba_sticks)?;
+        info.bind(py).set_item("riichi_sticks_on_table", self.state.riichi_sticks)?;
+        info.bind(py).set_item("honba_sticks_active", self.state.honba_sticks)?;
         for i in 0..3 {
-            info.set_item(format!("player_{}_score", i), self.state.player_scores[i])?;
-            info.set_item(format!("player_{}_riichi_declared", i), self.state.riichi_declared[i])?;
+            info.bind(py).set_item(format!("player_{}_score", i), self.state.player_scores[i])?;
+            info.bind(py).set_item(format!("player_{}_riichi_declared", i), self.state.riichi_declared[i])?;
         }
 
         Ok((obs_py, reward, done, info))
