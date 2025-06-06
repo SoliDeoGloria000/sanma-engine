@@ -1,8 +1,8 @@
 // src/game_state.rs
 
 use crate::hand::{Hand, HandError};
-use crate::tiles::Tile;
-use crate::wall::Wall;
+use crate::tiles::{Tile, TileExt};
+use crate::wall::{Wall, DEAD_WALL_SIZE};
 use crate::hand_parser::{
     self, ParsedStandardHand, ParsedChiitoitsu, ParsedKokushiMusou,
     ParsedMeld as ParserOutputMeld, ParsedMeldType as ParserOutputMeldType
@@ -248,7 +248,7 @@ impl GameState {
         Ok(())
     }
 
-    fn void_transient_flags_on_call(&mut self, _action_player_idx: usize) {
+    fn void_transient_flags_on_call(&mut self, _action_player_idx: usize, discarder_idx_opt: Option<usize>) {
         // When any call (Pon, Chi, Daiminkan, Shouminkan - but not Ankan/Kita by the riichi player themselves if it doesn't change waits)
         // happens, Ippatsu is voided for ALL players.
         for i in 0..3 {
@@ -611,7 +611,7 @@ impl GameState {
     /// Common actions after any Kan/Kita declaration (reveal new dora for Kan, draw replacement tile).
     /// This should be called *after* the Kan/Kita meld is added to `open_melds`.
     pub fn perform_kan_common_actions(&mut self, kan_player_idx: usize) -> Option<Tile> {
-        self.void_transient_flags_on_call(kan_player_idx); // Calls can void ippatsu, etc.
+        self.void_transient_flags_on_call(kan_player_idx, None); // Calls can void ippatsu, etc.
         // Double Riichi eligibility void if not already in Riichi
         if !self.riichi_declared[kan_player_idx] { self.double_riichi_eligible[kan_player_idx] = false; }
 
@@ -1197,7 +1197,7 @@ impl GameState {
         points += self.riichi_sticks as u32 * 1000;
         points += self.honba_sticks as u32 * 300; // Each honba stick adds 300 to the payout
 
-        Score { han, fu, points, yaku_details }
+        Score { han, fu, points, yaku_details: yaku_list }
     }
 
     pub fn apply_score_transfers_and_reset_sticks(&mut self, winning_player_seat: usize, win_type: WinType, score_details: &Score) {
@@ -2197,7 +2197,7 @@ mod tests {
             // For tests, this is usually fine as we control input.
             // If Hand::add returns Result, unwrap_or_else is good.
             // Assuming Hand::add panics on >4, direct call is okay.
-            hand.add(tile); 
+            hand.add(tile).unwrap();
         }
         hand
     }
@@ -2225,7 +2225,7 @@ mod tests {
             for i in 0..3 {
                 gs.hands[i] = Hand::default(); // Clear default dealt hand
                 for &tile in hands_tiles[i] {
-                    gs.hands[i].add(tile); // Use the hand's add method
+                    gs.hands[i].add(tile).unwrap(); // Use the hand's add method
                 }
             }
         }
