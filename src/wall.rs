@@ -9,7 +9,7 @@ use crate::tiles::Tile;
 // Honors (East, South, West, North, White, Green, Red = 7 types * 4 copies = 28 tiles)
 // Total tiles = 8 + 36 + 36 + 28 = 108 tiles.
 const TOTAL_TILES_GENERATED: usize = 108;
-const DEAD_WALL_SIZE: usize = 14;
+pub const DEAD_WALL_SIZE: usize = 14;
 
 // The `tiles` array in the Wall struct will hold all generated tiles.
 const WALL_ARRAY_LEN: usize = TOTAL_TILES_GENERATED; // Size of the `self.tiles` array
