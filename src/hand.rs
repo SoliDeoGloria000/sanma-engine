@@ -1,12 +1,36 @@
 use crate::tiles::Tile;
 use std::vec::Vec; // Ensure Vec is imported
+use std::fmt;
+
+/// Error type for operations on a `Hand`.
+#[derive(Debug, Clone)]
+pub enum HandError {
+    /// Generic error with a static message.
+    Generic(&'static str),
+}
+
+impl fmt::Display for HandError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HandError::Generic(msg) => write!(f, "{}", msg),
+        }
+    }
+}
+
+impl std::error::Error for HandError {}
+
+impl From<&'static str> for HandError {
+    fn from(s: &'static str) -> Self {
+        HandError::Generic(s)
+    }
+}
 
 /// Bit-packed hand: 3 bits per tile kind (0–7 copies is enough)
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Hand(u128);
 
 impl Hand {
-    pub fn add(&mut self, tile: Tile) {
+    pub fn add(&mut self, tile: Tile) -> Result<(), HandError> {
         let idx = tile as u8;
         let shift = idx * 3;
         let mask = 0b111u128 << shift;
@@ -15,11 +39,10 @@ impl Hand {
         // For game setup or special cases, this assert might be too strict if a hand can temporarily hold >4
         // For general play, it's a good sanity check. Let's assume it's okay for now.
         if count > 4 {
-            // Optionally handle this error more gracefully, e.g., by not adding or returning a Result
-            // For now, we'll keep the assert but note that robust error handling might be needed.
-             panic!("Cannot add more than 4 copies of {:?} to hand", tile);
+            return Err(HandError::Generic("Cannot add more than 4 copies of tile to hand"));
         }
         self.0 = (self.0 & !mask) | (count << shift);
+        Ok(())
     }
 
     pub fn count(&self, tile: Tile) -> u8 {
@@ -29,26 +52,25 @@ impl Hand {
 
     /// Removes a single instance of the specified tile.
     /// Returns true if the tile was present and removed, false otherwise.
-    pub fn remove(&mut self, tile: Tile) -> bool {
+    pub fn remove(&mut self, tile: Tile) -> Result<(), HandError> {
         let shift = (tile as u8) * 3;
         let mask  = 0b111u128 << shift;
         let count = (self.0 & mask) >> shift;
-        if count == 0 { return false; }
+        if count == 0 {
+            return Err(HandError::Generic("Tile not in hand"));
+        }
         self.0 = (self.0 & !mask) | ((count - 1) << shift);
-        true
+        Ok(())
     }
 
     /// Removes `n` instances of the specified tile.
     /// Returns `Ok(())` on success, or `Err(&'static str)` if not enough tiles.
-    pub fn remove_n(&mut self, tile: Tile, n: u8) -> Result<(), &'static str> {
+    pub fn remove_n(&mut self, tile: Tile, n: u8) -> Result<(), HandError> {
         if self.count(tile) < n {
-            return Err("Not enough tiles in hand to remove specified count");
+            return Err(HandError::Generic("Not enough tiles in hand to remove specified count"));
         }
         for _ in 0..n {
-            if !self.remove(tile) {
-                // This should not happen if the initial count check passed
-                return Err("Inconsistent state during remove_n");
-            }
+            self.remove(tile)?;
         }
         Ok(())
     }
@@ -84,39 +106,43 @@ mod tests {
     #[test]
     fn add_and_count() {
         let mut h = Hand::default();
-        h.add(Man5);
-        h.add(Man5);
+        h.add(Man5).unwrap();
+        h.add(Man5).unwrap();
         assert_eq!(h.count(Man5), 2);
-        h.add(Green);
+        h.add(Green).unwrap();
         assert_eq!(h.count(Green), 1);
     }
 
     #[test]
-    #[should_panic]
     fn add_too_many_tiles() {
         let mut h = Hand::default();
-        h.add(Man1); h.add(Man1); h.add(Man1); h.add(Man1);
-        h.add(Man1); // Fifth Man1 should panic
+        assert!(h.add(Man1).is_ok());
+        assert!(h.add(Man1).is_ok());
+        assert!(h.add(Man1).is_ok());
+        assert!(h.add(Man1).is_ok());
+        assert!(h.add(Man1).is_err()); // Fifth Man1 should error
     }
 
     #[test]
     fn remove_and_iter() {
         let mut h = Hand::default();
-        h.add(Red);
-        h.add(Red);
+        h.add(Red).unwrap();
+        h.add(Red).unwrap();
         assert_eq!(h.count(Red), 2);
-        assert!(h.remove(Red));
+        assert!(h.remove(Red).is_ok());
         assert_eq!(h.count(Red), 1);
-        assert!(h.remove(Red));
-        assert!(!h.remove(Red));
+        assert!(h.remove(Red).is_ok());
+        assert!(h.remove(Red).is_err());
         assert_eq!(h.iter().count(), 0);
     }
 
     #[test]
     fn test_remove_n() {
         let mut h = Hand::default();
-        h.add(Man1); h.add(Man1); h.add(Man1);
-        h.add(Pin2);
+        h.add(Man1).unwrap();
+        h.add(Man1).unwrap();
+        h.add(Man1).unwrap();
+        h.add(Pin2).unwrap();
 
         assert!(h.remove_n(Man1, 2).is_ok());
         assert_eq!(h.count(Man1), 1);
@@ -132,9 +158,10 @@ mod tests {
     #[test]
     fn test_get_all_tiles() {
         let mut h = Hand::default();
-        h.add(Man1); h.add(Man1);
-        h.add(Pin5);
-        h.add(East);
+        h.add(Man1).unwrap();
+        h.add(Man1).unwrap();
+        h.add(Pin5).unwrap();
+        h.add(East).unwrap();
 
         let mut tiles = h.get_all_tiles();
         tiles.sort_unstable(); // Sort for consistent comparison

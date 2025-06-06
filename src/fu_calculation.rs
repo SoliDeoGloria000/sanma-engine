@@ -233,7 +233,7 @@ mod tests {
             (HandParserMeldType::Shuntsu, [Sou1, Sou2, Sou3]), // Not in Sanma, but for generic test
             (HandParserMeldType::Shuntsu, [Man4, Man5, Man6]),
         ];
-        let parsed_hand = create_test_parsed_hand(East, parsed_melds_data);
+        let parsed_hand = create_test_parsed_hand(East, parsed_melds_data.clone());
         let input = FuCalculationInput {
             parsed_hand: &parsed_hand,
             open_melds_declared: &[],
@@ -383,8 +383,8 @@ mod tests {
     fn test_kan_fu() {
         // Hand: Ankan Man1 (terminal), Minkan Pin2 (simple), Seq, Pair Sou7
         // Let parsed_hand reflect the structure after kants are conceptually "absorbed"
-        let seq1 = HandParserMeld { meld_type: HandParserMeldType::Shuntsu, tiles: [Man4,Man5,Man6], is_concealed: true, representative_tile: Man4};
-        let seq2 = HandParserMeld { meld_type: HandParserMeldType::Shuntsu, tiles: [Pin4,Pin5,Pin6], is_concealed: true, representative_tile: Pin4};
+        let seq1 = (HandParserMeldType::Shuntsu, [Man4, Man5, Man6]);
+        let seq2 = (HandParserMeldType::Shuntsu, [Pin4, Pin5, Pin6]);
         // The Kantsu don't appear as Koutsu in parsed_hand if they are already open_melds.
         // So parsed_hand would only have 2 sequences and the pair if the other 2 melds are Kantsu.
         // This means FuCalculationInput needs to be robust to parsed_hand.melds.len() < 4 if Kants are present.
@@ -395,9 +395,11 @@ mod tests {
 
         // Let's test Fu parts directly.
         // Assume a hand where these are the only Fu components besides base/win.
-        let dummy_parsed_hand = create_test_parsed_hand(Man7, vec![seq1, seq2,
-            (HandParserMeldType::Shuntsu, [Man7,Man8,Man9]), // Dummy melds
-            (HandParserMeldType::Shuntsu, [Pin7,Pin8,Pin9])
+        let dummy_parsed_hand = create_test_parsed_hand(Man7, vec![
+            seq1,
+            seq2,
+            (HandParserMeldType::Shuntsu, [Man7, Man8, Man9]),
+            (HandParserMeldType::Shuntsu, [Pin7, Pin8, Pin9]),
         ]);
         let open_melds_with_kans = vec![
             DeclaredMeld { meld_type: DeclaredMeldType::Ankan, tiles: [Man1,Man1,Man1,Man1], called_from_discarder_idx: None, called_tile: None},
