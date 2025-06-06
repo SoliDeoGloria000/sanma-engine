@@ -2,10 +2,10 @@
 
 use crate::hand::{Hand, HandError};
 use crate::tiles::{Tile, TileExt};
-use crate::wall::{Wall, DEAD_WALL_SIZE};
+use crate::wall::Wall;
 use crate::hand_parser::{
     self, ParsedStandardHand, ParsedChiitoitsu, ParsedKokushiMusou,
-    ParsedMeld as ParserOutputMeld, ParsedMeldType as ParserOutputMeldType
+    ParsedMeldType as ParserOutputMeldType
 };
 use crate::fu_calculation::{self, FuCalculationInput};
 

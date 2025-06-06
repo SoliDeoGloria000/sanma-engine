@@ -1,7 +1,7 @@
 // src/fu_calculation.rs
 
-use crate::tiles::{Tile, TileExt};
-use crate::hand_parser::{ParsedStandardHand, ParsedMeld as HandParserMeld, ParsedMeldType as HandParserMeldType};
+use crate::tiles::Tile;
+use crate::hand_parser::{ParsedStandardHand, ParsedMeldType as HandParserMeldType};
 use crate::game_state::{WinType, DeclaredMeld, DeclaredMeldType}; // For context from GameState
 
 /// Contains all necessary information about the winning hand and game context for Fu calculation.
