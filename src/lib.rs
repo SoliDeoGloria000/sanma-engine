@@ -1,6 +1,6 @@
 // src/lib.rs
 use pyo3::prelude::*;
-use numpy::{IntoPyArray, PyArray, PyArray1, Ix3};
+use numpy::{PyArray, PyArray1, Ix3};
 use pyo3::types::PyDict;
 use pyo3::exceptions::{PyValueError, PyIndexError};
 
