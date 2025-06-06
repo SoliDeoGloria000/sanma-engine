@@ -131,7 +131,7 @@ impl Env {
 
         let mut reward = 0.0;
         let mut done = false;
-        let info = PyDict::new(py)?;
+        let info = PyDict::new(py);
 
         if self.current_phase == GamePhase::RoundOver {
             info.set_item("status", "RoundOver, please reset")?;
