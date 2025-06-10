@@ -6,7 +6,7 @@ from sanma_engine import Env
 
 def test_env_creation_and_reset():
     """Tests if the environment can be initialized and reset."""
-    env = Env(seed=123)
+    env = Env()
     assert env is not None, "Environment object could not be created."
     obs, legal_actions = env.reset(seed=456)
     assert obs.shape == (149, 5, 5), f"Observation shape is wrong: {obs.shape}"
@@ -18,7 +18,7 @@ def test_initial_observation_and_legal_actions():
     Tests if the initial observation and legal actions match what we expect
     for a fixed seed.
     """
-    env = Env(seed=1)
+    env = Env()
     obs, legal_actions = env.reset(seed=1)
     num_legal_actions = np.sum(legal_actions)
     assert num_legal_actions > 0, f"Expected at least one legal action, found {num_legal_actions}."
@@ -33,8 +33,8 @@ def test_initial_observation_and_legal_actions():
 
 def test_basic_step():
     """Tests if the environment can take a basic step without crashing."""
-    env = Env(seed=777)
-    obs, legal_actions = env.reset()
+    env = Env()
+    obs, legal_actions = env.reset(seed=777)
     action_id = np.where(legal_actions)[0][0]
     assert action_id != -1, "No legal action found in the initial state."
     try:
@@ -52,7 +52,7 @@ def test_observation_planes_on_reset():
     Tests if the newly added observation planes (winds, scores) are correct
     on a clean reset.
     """
-    env = Env(seed=1)
+    env = Env()
     obs, _ = env.reset(seed=1)
 
     # Player 0 is current. Round should be East.
