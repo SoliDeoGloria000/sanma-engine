@@ -131,44 +131,42 @@ def process_round(round_data, env):
     discard_queues = [deque(round_data[6 + i * 3]) for i in range(3)]
     
     turn_limit = 200 # Safety break
-for _ in range(turn_limit):
-    current_phase = env.get_game_phase_pystr()
+    for _ in range(turn_limit):
+        current_phase = env.get_game_phase_pystr()
     
-    if current_phase == "RoundOver":
-        break
+        if current_phase == "RoundOver":
+            break
 
-    current_actor_idx = env.current_player_idx_py()
-    obs, legal_actions_mask = env.get_obs_and_legal_actions()
+        current_actor_idx = env.current_player_idx_py()
+        obs, legal_actions_mask = env.get_obs_and_legal_actions()
     
-    log_action = None
+        log_action = None
     
-    # --- State-Driven Logic ---
+        # --- State-Driven Logic ---
 
-    if current_phase == "PlayerTurnAction":
+        if current_phase == "PlayerTurnAction":
         # The engine is waiting for the current player to act after a draw.
         # Their action will be in their DISCARD queue.
         # Note: The actual drawn tile is already handled by the engine's internal state.
         # We just need to consume the corresponding draw from our queue to stay in sync.
-        if draw_queues[current_actor_idx]:
-             draw_queues[current_actor_idx].popleft() # Consume the draw event
+            if draw_queues[current_actor_idx]:
+                 draw_queues[current_actor_idx].popleft() # Consume the draw event
 
-        if discard_queues[current_actor_idx]:
-            log_action = discard_queues[current_actor_idx].popleft()
-        else:
-            break # No more actions for this player.
+            if discard_queues[current_actor_idx]:
+                log_action = discard_queues[current_actor_idx].popleft()
+            else:
+                break # No more actions for this player.
 
-    elif current_phase in ["WaitingForCalls", "ProcessingShouminkanChankan"]:
+        elif current_phase in ["WaitingForCalls", "ProcessingShouminkanChankan"]:
         # A discard just occurred. The engine is waiting for other players to interrupt.
         # An interrupting call ('p', 'm', 'n') is found in the caller's DRAW queue.
-        peek_action = draw_queues[current_actor_idx][0]
-        if isinstance(peek_action, str) and any(c in peek_action for c in 'mpn'):
-            # This player is making a call.
-            log_action = draw_queues[current_actor_idx].popleft() # Pop the call action
-        else:
-            # This player is not making a call, so they pass.
-            log_action = "PASS"
+            peek_action = draw_queues[current_actor_idx][0]
+            if isinstance(peek_action, str) and any(c in peek_action for c in 'mpn'):
+                # This player is making a call.
+                log_action = draw_queues[current_actor_idx].popleft() # Pop the call action
             else:
-                log_action = "PASS" # No more actions means they pass.
+                # This player is not making a call, so they pass.
+                log_action = "PASS"
 
         if log_action is None: break
 
@@ -193,7 +191,7 @@ for _ in range(turn_limit):
             if DEBUG_MODE:
                 print(f"  [Debug] Error stepping env with action '{log_action}' (ID {rust_action_id}): {e}\n{traceback.format_exc()}")
             break
-            
+
     return obs_action_pairs
 
 # ==============================================================================
