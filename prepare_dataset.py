@@ -30,7 +30,9 @@ RAW_LOGS_DIR = "data/raw_logs"
 SAVE_DIR = "data/shards"
 SHARD_SIZE = 50000  # Number of (observation, action) pairs per .npz file
 DEBUG_MODE = True  # Set to False for faster processing of large log sets
-SUPPRESS_ENGINE_WARNINGS = True
+# Set to False to see warnings from the Rust engine when debugging dataset
+# extraction issues.
+SUPPRESS_ENGINE_WARNINGS = False
 
 # --- Action ID Constants (ensure these match lib.rs) ---
 NUM_TILE_TYPES = 34
@@ -150,6 +152,54 @@ def map_log_action_to_rust_id(log_action, env, legal_actions_mask=None):
         if 'n' in log_action: return ACTION_ID_RON_AGARI
             
     return None
+
+
+def is_log_action_complex(log_action):
+    """Rudimentary check if an action string from the raw log represents a
+    complex call or win."""
+    if isinstance(log_action, str):
+        if any(c in log_action for c in "rpakmnf"):
+            return True
+        try:
+            int(log_action)
+            return False
+        except ValueError:
+            return True
+    return False
+
+
+def count_actions_in_round_raw(round_data):
+    """Count simple and complex actions directly from a raw log round."""
+    simple = 0
+    complex_c = 0
+    for i in range(3):
+        discards = round_data[6 + i * 3]
+        draws = round_data[5 + i * 3]
+        for act in discards:
+            if is_log_action_complex(act):
+                complex_c += 1
+            else:
+                simple += 1
+        for act in draws:
+            if isinstance(act, str):
+                if is_log_action_complex(act):
+                    complex_c += 1
+                else:
+                    simple += 1
+    return simple, complex_c
+
+
+def count_actions_in_log_file(log_json):
+    """Aggregate action counts across all rounds of a log file."""
+    total_simple = 0
+    total_complex = 0
+    for round_data in log_json.get("log", []):
+        if round_data and isinstance(round_data[-1], list) and round_data[-1][0] == "流局":
+            continue
+        s, c = count_actions_in_round_raw(round_data)
+        total_simple += s
+        total_complex += c
+    return total_simple, total_complex
 
 # ==============================================================================
 # SECTION 2: ROBUST GAME REPLAY LOGIC
@@ -285,9 +335,12 @@ def main():
         file_pair_count = 0
         file_simple = 0
         file_complex = 0
+        log_simple = 0
+        log_complex = 0
         try:
             with open(log_file_path, 'r', encoding='utf-8') as f:
                 log_file_json = json.load(f)
+            log_simple, log_complex = count_actions_in_log_file(log_file_json)
             for round_data in log_file_json.get('log', []):
                 if round_data[-1][0] == '流局': continue
 
@@ -310,6 +363,9 @@ def main():
         print(
             f"  --> Extracted {file_pair_count} potential pairs from this file. "
             f"Simple: {file_simple}, Complex: {file_complex}"
+        )
+        print(
+            f"      Original log actions - Simple: {log_simple}, Complex: {log_complex}"
         )
         
         while len(all_pairs) >= SHARD_SIZE:
