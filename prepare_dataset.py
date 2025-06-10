@@ -412,18 +412,18 @@ def main():
                     continue
 
                 round_pairs = process_round(round_data, env)
-                if round_pairs:
-                    all_pairs.extend(round_pairs)
-                    file_pair_count += len(round_pairs)
-                    for p in round_pairs:
-                        if p["action"] == ACTION_ID_PASS:
-                            file_pass += 1
-                        if is_complex_action_id(p["action"]):
-                            total_complex += 1
-                            file_complex += 1
-                        else:
-                            total_simple += 1
-                            file_simple += 1
+                for p in round_pairs:
+                    if p["action"] == ACTION_ID_PASS:
+                        file_pass += 1
+                        continue
+                    all_pairs.append(p)
+                    file_pair_count += 1
+                    if is_complex_action_id(p["action"]):
+                        total_complex += 1
+                        file_complex += 1
+                    else:
+                        total_simple += 1
+                        file_simple += 1
         except Exception as e:
             print(
                 f"  [Error] Could not process file '{os.path.basename(log_file_path)}'. Error: {e}"
@@ -433,10 +433,10 @@ def main():
             continue
 
         logged_total = log_simple + log_complex
-        effective_pairs = file_pair_count - file_pass
+        effective_pairs = file_pair_count
         extraction_rate = effective_pairs / logged_total if logged_total else 0.0
         print(
-            f"  --> Extracted {file_pair_count} potential pairs from this file. "
+            f"  --> Extracted {file_pair_count} pairs from this file. "
             f"Simple: {file_simple}, Complex: {file_complex}, Passes: {file_pass}"
         )
         print(
