@@ -14,6 +14,7 @@ import traceback
 from collections import deque
 import contextlib
 import sys
+import argparse
 
 try:
     # This assumes your compiled Rust library is named 'sanma_engine'
@@ -385,7 +386,7 @@ def process_round(round_data, env):
 # ==============================================================================
 
 
-def main():
+def main(keep_pass: bool = False):
     print("Starting dataset preparation using the Rust game engine...")
     os.makedirs(SAVE_DIR, exist_ok=True)
     all_log_files = glob.glob(os.path.join(RAW_LOGS_DIR, "*.json"))
@@ -402,6 +403,8 @@ def main():
     env = Env()
     total_simple = 0
     total_complex = 0
+
+    total_pass = 0
 
     for i, log_file_path in enumerate(all_log_files):
         print(
@@ -432,6 +435,10 @@ def main():
                 for p in round_pairs:
                     if p["action"] == ACTION_ID_PASS:
                         file_pass += 1
+                        if keep_pass:
+                            all_pairs.append(p)
+                            file_pair_count += 1
+                            total_pass += 1
                         continue
                     all_pairs.append(p)
                     file_pair_count += 1
@@ -459,7 +466,8 @@ def main():
         print(
             f"      Original log actions - Simple: {log_simple}, Complex: {log_complex}"
         )
-        print(f"      Extraction rate (excluding passes): {extraction_rate:.2%}")
+        rate_label = "including passes" if keep_pass else "excluding passes"
+        print(f"      Extraction rate ({rate_label}): {extraction_rate:.2%}")
 
         while len(all_pairs) >= SHARD_SIZE:
             pairs_to_save = all_pairs[:SHARD_SIZE]
@@ -484,11 +492,11 @@ def main():
             f"\n----> Saved final shard {shard_num:04d} with {len(actions)} pairs to {shard_path}"
         )
 
-    total_pairs = total_simple + total_complex
+    total_pairs = total_simple + total_complex + (total_pass if keep_pass else 0)
     if total_pairs:
-        ratio = total_complex / total_pairs
+        ratio = total_complex / (total_pairs - (total_pass if keep_pass else 0)) if (total_pairs - (total_pass if keep_pass else 0)) else 0
         print(
-            f"\nCollected {total_pairs} pairs (Simple: {total_simple}, Complex: {total_complex}, Complex ratio: {ratio:.2%})"
+            f"\nCollected {total_pairs} pairs (Simple: {total_simple}, Complex: {total_complex}, Passes: {total_pass}, Complex ratio: {ratio:.2%})"
         )
 
     print("\nDataset preparation finished.")
@@ -500,4 +508,15 @@ if __name__ == "__main__":
         print(
             f"Created directory '{RAW_LOGS_DIR}'. Please place your Tenhou .json log files here."
         )
-    main()
+
+    parser = argparse.ArgumentParser(
+        description="Prepare dataset using the Rust game engine."
+    )
+    parser.add_argument(
+        "--keep-pass",
+        action="store_true",
+        help="Include PASS actions in the saved dataset",
+    )
+    args = parser.parse_args()
+
+    main(keep_pass=args.keep_pass)

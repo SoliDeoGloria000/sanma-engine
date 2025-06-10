@@ -23,5 +23,7 @@ Follow these steps to build and verify the project:
 `prepare_dataset.py` also relies on the compiled extension, so make sure it is built before running:
 
 ```bash
-python prepare_dataset.py
+python prepare_dataset.py [--keep-pass]
 ```
+
+Use the `--keep-pass` flag if you want to include PASS actions in the generated dataset.
