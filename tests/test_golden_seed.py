@@ -11,7 +11,7 @@ def test_reproducible_short_game():
     ACTION_SEQUENCE_LENGTH = 5
     EXPECTED_FINAL_SCORES = [35000, 35000, 35000]
 
-    env = Env(seed=GOLDEN_SEED)
+    env = Env()
     obs, legal_actions = env.reset(seed=GOLDEN_SEED)
 
     for i in range(ACTION_SEQUENCE_LENGTH):

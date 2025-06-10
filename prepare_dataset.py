@@ -130,6 +130,28 @@ def process_round(round_data, env):
     draw_queues = [deque(round_data[5 + i * 3]) for i in range(3)]
     discard_queues = [deque(round_data[6 + i * 3]) for i in range(3)]
     
+    turn_limit = 200  # Safety break
+    for _ in range(turn_limit):
+        current_phase = env.get_game_phase_pystr()
+
+        if current_phase == "RoundOver":
+            break
+
+        current_actor_idx = env.current_player_idx_py()
+        obs, legal_actions_mask = env.get_obs_and_legal_actions()
+
+        log_action = None
+
+        # --- State-Driven Logic ---
+
+        if current_phase == "PlayerTurnAction":
+            # The engine is waiting for the current player to act after a draw.
+            # Their action will be in their DISCARD queue.
+            # Note: The actual drawn tile is already handled by the engine's internal state.
+            # We just need to consume the corresponding draw from our queue to stay in sync.
+            if draw_queues[current_actor_idx]:
+                draw_queues[current_actor_idx].popleft()  # Consume the draw event
+=======
     turn_limit = 200 # Safety break
     for _ in range(turn_limit):
         current_phase = env.get_game_phase_pystr()
@@ -151,10 +173,22 @@ def process_round(round_data, env):
         # We just need to consume the corresponding draw from our queue to stay in sync.
             if draw_queues[current_actor_idx]:
                  draw_queues[current_actor_idx].popleft() # Consume the draw event
+      main
 
             if discard_queues[current_actor_idx]:
                 log_action = discard_queues[current_actor_idx].popleft()
             else:
+
+                break  # No more actions for this player.
+
+        elif current_phase in ["WaitingForCalls", "ProcessingShouminkanChankan"]:
+            # A discard just occurred. The engine is waiting for other players to interrupt.
+            # An interrupting call ('p', 'm', 'n') is found in the caller's DRAW queue.
+            peek_action = draw_queues[current_actor_idx][0]
+            if isinstance(peek_action, str) and any(c in peek_action for c in 'mpn'):
+                # This player is making a call.
+                log_action = draw_queues[current_actor_idx].popleft()  # Pop the call action
+=======
                 break # No more actions for this player.
 
         elif current_phase in ["WaitingForCalls", "ProcessingShouminkanChankan"]:
@@ -164,15 +198,18 @@ def process_round(round_data, env):
             if isinstance(peek_action, str) and any(c in peek_action for c in 'mpn'):
                 # This player is making a call.
                 log_action = draw_queues[current_actor_idx].popleft() # Pop the call action
+       main
             else:
                 # This player is not making a call, so they pass.
                 log_action = "PASS"
 
-        if log_action is None: break
+        if log_action is None:
+            break
 
         rust_action_id = ACTION_ID_PASS if log_action == "PASS" else map_log_action_to_rust_id(log_action, env)
         if rust_action_id is None:
-            if DEBUG_MODE: print(f"  [Debug] Could not map log action: '{log_action}'")
+            if DEBUG_MODE:
+                print(f"  [Debug] Could not map log action: '{log_action}'")
             continue
 
         if legal_actions_mask[rust_action_id]:
@@ -182,14 +219,17 @@ def process_round(round_data, env):
                 print(f"\n  [Desync Warning] Player {current_actor_idx}, Phase: {current_phase}")
                 print(f"  Log action '{log_action}' mapped to illegal action ID {rust_action_id}.")
                 print(f"  Legal action IDs from engine: {np.where(legal_actions_mask)[0]}")
-            break # Stop processing this round on desync
+            break  # Stop processing this round on desync
 
         try:
             _, _, done, _ = env.step(rust_action_id)
-            if done: break
+            if done:
+                break
         except Exception as e:
             if DEBUG_MODE:
-                print(f"  [Debug] Error stepping env with action '{log_action}' (ID {rust_action_id}): {e}\n{traceback.format_exc()}")
+                print(
+                    f"  [Debug] Error stepping env with action '{log_action}' (ID {rust_action_id}): {e}\n{traceback.format_exc()}"
+                )
             break
 
     return obs_action_pairs
