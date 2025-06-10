@@ -11,6 +11,8 @@ import re
 import json
 import traceback
 from collections import deque
+import contextlib
+import sys
 
 try:
     # This assumes your compiled Rust library is named 'sanma_engine'
@@ -28,6 +30,7 @@ RAW_LOGS_DIR = "data/raw_logs"
 SAVE_DIR = "data/shards"
 SHARD_SIZE = 50000  # Number of (observation, action) pairs per .npz file
 DEBUG_MODE = True  # Set to False for faster processing of large log sets
+SUPPRESS_ENGINE_WARNINGS = True
 
 # --- Action ID Constants (ensure these match lib.rs) ---
 NUM_TILE_TYPES = 34
@@ -41,6 +44,27 @@ ACTION_ID_RON_AGARI = ACTION_ID_TSUMO_AGARI + 1
 ACTION_ID_PON = ACTION_ID_RON_AGARI + 1
 ACTION_ID_DAIMINKAN = ACTION_ID_PON + 1
 ACTION_ID_PASS = ACTION_ID_DAIMINKAN + 1
+
+def is_complex_action_id(action_id: int) -> bool:
+    """Determine if the given action ID represents a complex call or win."""
+    if ACTION_ID_DISCARD_START <= action_id < ACTION_ID_ANKAN_START:
+        return False
+    return action_id in {
+        ACTION_ID_KITA,
+        ACTION_ID_TSUMO_AGARI,
+        ACTION_ID_RON_AGARI,
+        ACTION_ID_PON,
+        ACTION_ID_DAIMINKAN,
+    } or action_id >= ACTION_ID_ANKAN_START
+
+@contextlib.contextmanager
+def suppress_output():
+    if not SUPPRESS_ENGINE_WARNINGS:
+        yield
+        return
+    with open(os.devnull, "w") as devnull:
+        with contextlib.redirect_stdout(devnull), contextlib.redirect_stderr(devnull):
+            yield
 
 # ==============================================================================
 # SECTION 1: DATA CONVERSION HELPERS
@@ -142,7 +166,8 @@ def process_round(round_data, env):
     if initial_state is None: return []
     
     try:
-        env.reset(seed=0, initial_draws=initial_state.pop("initial_draws"), **initial_state)
+        with suppress_output():
+            env.reset(seed=0, initial_draws=initial_state.pop("initial_draws"), **initial_state)
     except Exception as e:
         if DEBUG_MODE: print(f"  [Debug] Error resetting env: {e}\n{traceback.format_exc()}")
         return []
@@ -216,7 +241,8 @@ def process_round(round_data, env):
         obs_action_pairs.append({'observation': obs.copy(), 'action': rust_action_id})
 
         try:
-            _, _, done, _ = env.step(rust_action_id)
+            with suppress_output():
+                _, _, done, _ = env.step(rust_action_id)
             if (
                 log_action != "PASS"
                 and isinstance(log_action, str)
@@ -251,26 +277,40 @@ def main():
     all_pairs = []
     shard_num = 0
     env = Env()
+    total_simple = 0
+    total_complex = 0
 
     for i, log_file_path in enumerate(all_log_files):
         print(f"Processing file {i+1}/{len(all_log_files)}: {os.path.basename(log_file_path)}...")
         file_pair_count = 0
+        file_simple = 0
+        file_complex = 0
         try:
             with open(log_file_path, 'r', encoding='utf-8') as f:
                 log_file_json = json.load(f)
             for round_data in log_file_json.get('log', []):
-                if round_data[-1][0] == '流局': continue 
-                
+                if round_data[-1][0] == '流局': continue
+
                 round_pairs = process_round(round_data, env)
                 if round_pairs:
                     all_pairs.extend(round_pairs)
                     file_pair_count += len(round_pairs)
+                    for p in round_pairs:
+                        if is_complex_action_id(p['action']):
+                            total_complex += 1
+                            file_complex += 1
+                        else:
+                            total_simple += 1
+                            file_simple += 1
         except Exception as e:
             print(f"  [Error] Could not process file '{os.path.basename(log_file_path)}'. Error: {e}")
             if DEBUG_MODE: traceback.print_exc()
             continue
-        
-        print(f"  --> Extracted {file_pair_count} potential pairs from this file.")
+
+        print(
+            f"  --> Extracted {file_pair_count} potential pairs from this file. "
+            f"Simple: {file_simple}, Complex: {file_complex}"
+        )
         
         while len(all_pairs) >= SHARD_SIZE:
             pairs_to_save = all_pairs[:SHARD_SIZE]
@@ -288,6 +328,13 @@ def main():
         shard_path = os.path.join(SAVE_DIR, f"shard_{shard_num:04d}.npz")
         np.savez_compressed(shard_path, observations=observations, actions=actions)
         print(f"\n----> Saved final shard {shard_num:04d} with {len(actions)} pairs to {shard_path}")
+
+    total_pairs = total_simple + total_complex
+    if total_pairs:
+        ratio = total_complex / total_pairs
+        print(
+            f"\nCollected {total_pairs} pairs (Simple: {total_simple}, Complex: {total_complex}, Complex ratio: {ratio:.2%})"
+        )
 
     print("\nDataset preparation finished.")
 
