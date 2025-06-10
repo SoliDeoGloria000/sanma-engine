@@ -1,40 +1,47 @@
 // src/tiles.rs
+
+// --- IMPORTS FIRST ---
+// All 'use' statements should be at the top of the file.
+use pyo3::prelude::*;
+use pyo3::exceptions::PyValueError; // <-- Add this missing import
+
+// --- ALL ATTRIBUTES GO DIRECTLY ABOVE THE ENUM ---
+#[pyclass(frozen)]
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Tile {
     Man1 = 0, Man2, Man3, Man4, Man5, Man6, Man7, Man8, Man9,
     Pin1, Pin2, Pin3, Pin4, Pin5, Pin6, Pin7, Pin8, Pin9,
     Sou1, Sou2, Sou3, Sou4, Sou5, Sou6, Sou7, Sou8, Sou9,
-    East, South, West, // North is separate for Kita
+    East, South, West,
     White, Green, Red,
-    North,           // Kita (often treated as a separate honor/yakuhai in Sanma)
+    North,
 }
 
-impl TryFrom<u8> for Tile {
-    type Error = ();
-    fn try_from(v: u8) -> Result<Self, Self::Error> {
-        use Tile::*;
-        Ok(match v {
-            0 => Man1, 1 => Man2, 2 => Man3, 3 => Man4, 4 => Man5,
-            5 => Man6, 6 => Man7, 7 => Man8, 8 => Man9,
-            9 => Pin1, 10 => Pin2, 11 => Pin3, 12 => Pin4, 13 => Pin5,
-            14 => Pin6, 15 => Pin7, 16 => Pin8, 17 => Pin9,
-            18 => Sou1, 19 => Sou2, 20 => Sou3, 21 => Sou4, 22 => Sou5,
-            23 => Sou6, 24 => Sou7, 25 => Sou8, 26 => Sou9,
-            27 => East, 28 => South, 29 => West,
-            30 => White, 31 => Green, 32 => Red,
-            33 => North, // Kita
-            _ => return Err(()),
-        })
+// This block exposes methods to Python.
+#[pymethods]
+impl Tile {
+    #[getter]
+    fn value(&self) -> u8 {
+        *self as u8
+    }
+
+    #[staticmethod]
+    pub fn to_unicode_py(tile_val: u8) -> PyResult<String> {
+        match Tile::try_from(tile_val) {
+            Ok(tile) => Ok(tile.to_unicode().to_string()),
+            Err(_) => Err(PyValueError::new_err("Invalid tile value"))
+        }
     }
 }
 
+// This block is for pure Rust logic.
 impl Tile {
     pub fn to_unicode(self) -> char {
         use Tile::*;
         match self {
             Man1 => '🀇', Man2 => '🀈', Man3 => '🀉', Man4 => '🀊', Man5 => '🀋',
-            Man6 => '🀌', Man7 => '🀍', Man8 => '🀎', Man9 => '🀏', // Corrected Man6
+            Man6 => '🀌', Man7 => '🀍', Man8 => '🀎', Man9 => '🀏',
             Pin1 => '🀙', Pin2 => '🀚', Pin3 => '🀛', Pin4 => '🀜', Pin5 => '🀝',
             Pin6 => '🀞', Pin7 => '🀟', Pin8 => '🀠', Pin9 => '🀡',
             Sou1 => '🀐', Sou2 => '🀑', Sou3 => '🀒', Sou4 => '🀓', Sou5 => '🀔',
@@ -57,67 +64,43 @@ impl Tile {
         }
     }
 
-    // Added Helper Methods:
     pub fn get_number_val(self) -> Option<u8> {
         if self.is_suited_number() {
             Some(((self as u8) % 9) + 1)
-        } else {
-            None
-        }
+        } else { None }
     }
 
-    pub fn is_suited_number(self) -> bool {
-        (self as u8) < (Tile::East as u8) // Man (0-8), Pin (9-17), Sou (18-26)
-    }
-
+    pub fn is_suited_number(self) -> bool { (self as u8) < (Tile::East as u8) }
     pub fn is_terminal(self) -> bool {
-        if !self.is_suited_number() {
-            return false;
-        }
-        let val = self.get_number_val().unwrap(); // Safe due to is_suited_number check
+        if !self.is_suited_number() { return false; }
+        let val = self.get_number_val().unwrap();
         val == 1 || val == 9
     }
+    pub fn is_honor(self) -> bool { (self as u8) >= (Tile::East as u8) && (self as u8) <= (Tile::North as u8) }
+    pub fn is_terminal_or_honor(self) -> bool { self.is_terminal() || self.is_honor() }
+    pub fn is_dragon(self) -> bool { matches!(self, Tile::White | Tile::Green | Tile::Red) }
+    pub fn is_wind(self) -> bool { matches!(self, Tile::East | Tile::South | Tile::West | Tile::North) }
+}
 
-    pub fn is_honor(self) -> bool {
-        // East, South, West, White, Green, Red, North
-        (self as u8) >= (Tile::East as u8) && (self as u8) <= (Tile::North as u8)
-    }
-
-    pub fn is_terminal_or_honor(self) -> bool {
-        self.is_terminal() || self.is_honor()
-    }
-
-    pub fn is_dragon(self) -> bool {
-        matches!(self, Tile::White | Tile::Green | Tile::Red)
-    }
-
-    pub fn is_wind(self) -> bool {
-        matches!(self, Tile::East | Tile::South | Tile::West | Tile::North)
+impl TryFrom<u8> for Tile {
+    type Error = ();
+    fn try_from(v: u8) -> Result<Self, Self::Error> {
+        if v <= 33 { Ok(unsafe { std::mem::transmute(v) }) } else { Err(()) }
     }
 }
 
-/// Helper trait exposing convenience methods for `Tile`.
-///
-/// This trait used to live inside `game_state.rs`, which made it
-/// inaccessible to other modules.  Modules such as `hand_parser` rely on
-/// these helper methods (e.g. `get_suit`) so the trait needs to be public
-/// and defined where `Tile` itself is defined.  Moving the definition here
-/// fixes compilation errors caused by the trait being private.
+// --- TRAIT DEFINITION AND IMPLEMENTATION ---
 pub trait TileExt {
     fn is_manzu(&self) -> bool;
     fn is_pinzu(&self) -> bool;
     fn is_sou(&self) -> bool;
     fn get_suit_char(&self) -> Option<char>;
     fn get_suit(&self) -> Option<u8>;
-    fn get_number_val(&self) -> Option<u8>;
-    fn is_suited_number(&self) -> bool;
+    // vvv ADD THESE MISSING LINES vvv
     fn is_terminal(&self) -> bool;
     fn is_honor(&self) -> bool;
     fn is_terminal_or_honor(&self) -> bool;
-    fn is_dragon(&self) -> bool;
-    fn is_wind(&self) -> bool;
     fn next_in_series(&self) -> Tile;
-    fn to_unicode_char(self) -> char;
 }
 
 impl TileExt for Tile {
@@ -138,16 +121,12 @@ impl TileExt for Tile {
         else if self.is_sou() { Some(2) }
         else { None }
     }
-
-    fn get_number_val(&self) -> Option<u8> { Tile::get_number_val(*self) }
-    fn is_suited_number(&self) -> bool { Tile::is_suited_number(*self) }
+    
+    // --- IMPLEMENTED THE MISSING METHODS ---
     fn is_terminal(&self) -> bool { Tile::is_terminal(*self) }
     fn is_honor(&self) -> bool { Tile::is_honor(*self) }
     fn is_terminal_or_honor(&self) -> bool { Tile::is_terminal_or_honor(*self) }
-    fn is_dragon(&self) -> bool { Tile::is_dragon(*self) }
-    fn is_wind(&self) -> bool { Tile::is_wind(*self) }
     fn next_in_series(&self) -> Tile { Tile::next_in_series(*self) }
-    fn to_unicode_char(self) -> char { Tile::to_unicode(self) }
 }
 
 #[cfg(test)]

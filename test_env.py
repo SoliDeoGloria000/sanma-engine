@@ -1,10 +1,20 @@
 import sanma_engine
+import numpy as np
 
 env = sanma_engine.Env(42)
-_ = env.reset()
-print("initial hand0 size:", env.hand_size(0))
+obs, legal_actions = env.reset(seed=42)
+print("initial hand0 size:", env.get_hand_size(0))
 
-# Assume for smoke test we discard a tile we know: 
-# e.g., Tile ID 0 corresponds to Man1—if it's in your hand, this will work.
-obs, r, done = env.step(0)
-print("after discarding Man1, hand0 size:", env.hand_size(0))
+# Find the first legal discard action
+action_to_take = -1
+for i, is_legal in enumerate(legal_actions):
+    # Action IDs 0-33 are discards
+    if is_legal and 0 <= i <= 33:
+        action_to_take = i
+        break
+
+assert action_to_take != -1, "Could not find a legal discard action"
+
+print(f"Attempting to discard tile with action ID: {action_to_take}")
+obs, r, done, info = env.step(action_to_take)
+print("after discarding, hand0 size:", env.get_hand_size(0))

@@ -7,6 +7,6 @@ edition = "2021"
 crate-type = ["cdylib"]        # produce a shared library PyO3 can wrap
 
 [dependencies]
-pyo3 = { version = "0.21", features = ["extension-module"] }
-numpy = "0.21"
-rand  = { version = "0.8", features = ["std"] }
+numpy = "0.21.0"
+pyo3 = { version = "0.21.2", features = ["extension-module"] }
+rand = "0.8.5"

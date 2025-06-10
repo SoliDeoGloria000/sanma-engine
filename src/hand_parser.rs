@@ -91,19 +91,18 @@ fn find_melds_recursive(current_counts: &mut [u8; 34], melds_to_find: u8) -> Opt
 
     let start_idx = match current_counts.iter().position(|&count| count > 0) {
         Some(idx) => idx,
-        None => return None, // No tiles left, but still need to find melds
+        None => return None, // Should be covered by melds_to_find == 0, but good for safety
     };
 
-    // 1. Try to form a Koutsu (Triplet)
+    // --- Try to form a Koutsu (Triplet) ---
     if current_counts[start_idx] >= 3 {
         let meld_tile = Tile::try_from(start_idx as u8).expect("Invalid tile index for Koutsu");
         current_counts[start_idx] -= 3;
-
         if let Some(mut subsequent_melds) = find_melds_recursive(current_counts, melds_to_find - 1) {
             subsequent_melds.push(ParsedMeld {
                 meld_type: ParsedMeldType::Koutsu,
                 tiles: [meld_tile, meld_tile, meld_tile],
-                is_concealed: true, 
+                is_concealed: true,
                 representative_tile: meld_tile,
             });
             return Some(subsequent_melds);
@@ -111,46 +110,48 @@ fn find_melds_recursive(current_counts: &mut [u8; 34], melds_to_find: u8) -> Opt
         current_counts[start_idx] += 3; // Backtrack
     }
 
-    // 2. Try to form a Shuntsu (Sequence)
+    // --- Try to form a Shuntsu (Sequence) ---
     let t1_tile = Tile::try_from(start_idx as u8).expect("Invalid tile index for Shuntsu t1");
-    if t1_tile.is_suited_number() { 
-        if let Some(num_val) = t1_tile.get_number_val() {
-            if num_val <= 7 { // Sequence can start with 1 through 7
-                let t1_idx = start_idx;
-                let t2_idx = start_idx + 1;
-                let t3_idx = start_idx + 2;
+    // Check if the tile can start a sequence (suited and not 8 or 9)
+    if t1_tile.is_suited_number() && t1_tile.get_number_val().unwrap_or(9) <= 7 {
+        let t2_idx = start_idx + 1;
+        let t3_idx = start_idx + 2;
 
-                // Ensure t2_idx and t3_idx are valid tile indices
-                if t3_idx < 34 { // Max tile ID is 33 (North)
-                    if let (Some(t2_tile), Some(t3_tile)) = (Tile::try_from(t2_idx as u8).ok(), Tile::try_from(t3_idx as u8).ok()) {
-                        // Check if t2 and t3 are in the same suit as t1
-                        if t1_tile.get_suit() == t2_tile.get_suit() && t1_tile.get_suit() == t3_tile.get_suit() {
-                            if current_counts[t1_idx] > 0 && current_counts[t2_idx] > 0 && current_counts[t3_idx] > 0 {
-                                current_counts[t1_idx] -= 1;
-                                current_counts[t2_idx] -= 1;
-                                current_counts[t3_idx] -= 1;
+        if t3_idx < 34 { // Ensure we don't go out of bounds for tiles
+            // Check if t2 and t3 are in the same suit and exist in the hand
+            if let (Some(t2_tile), Some(t3_tile)) = (Tile::try_from(t2_idx as u8).ok(), Tile::try_from(t3_idx as u8).ok()) {
+                if t1_tile.get_suit() == t2_tile.get_suit() && t1_tile.get_suit() == t3_tile.get_suit() {
+                    if current_counts[start_idx] > 0 && current_counts[t2_idx] > 0 && current_counts[t3_idx] > 0 {
+                        
+                        // Take the sequence
+                        current_counts[start_idx] -= 1;
+                        current_counts[t2_idx] -= 1;
+                        current_counts[t3_idx] -= 1;
 
-                                if let Some(mut subsequent_melds) = find_melds_recursive(current_counts, melds_to_find - 1) {
-                                    subsequent_melds.push(ParsedMeld {
-                                        meld_type: ParsedMeldType::Shuntsu,
-                                        tiles: [t1_tile, t2_tile, t3_tile],
-                                        is_concealed: true,
-                                        representative_tile: t1_tile, 
-                                    });
-                                    return Some(subsequent_melds);
-                                }
-                                current_counts[t1_idx] += 1;
-                                current_counts[t2_idx] += 1;
-                                current_counts[t3_idx] += 1; // Backtrack
-                            }
+                        if let Some(mut subsequent_melds) = find_melds_recursive(current_counts, melds_to_find - 1) {
+                            subsequent_melds.push(ParsedMeld {
+                                meld_type: ParsedMeldType::Shuntsu,
+                                tiles: [t1_tile, t2_tile, t3_tile],
+                                is_concealed: true,
+                                representative_tile: t1_tile,
+                            });
+                            return Some(subsequent_melds);
                         }
+                        
+                        // Backtrack
+                        current_counts[start_idx] += 1;
+                        current_counts[t2_idx] += 1;
+                        current_counts[t3_idx] += 1;
                     }
                 }
             }
         }
     }
-    None 
+
+    // If neither Koutsu nor Shuntsu path from start_idx leads to a solution
+    None
 }
+
 
 /// Parses a set of 14 tiles for Chiitoitsu (Seven Pairs).
 /// Returns `Some(ParsedChiitoitsu)` or `None`.

@@ -1,7 +1,8 @@
 // src/fu_calculation.rs
 
 use crate::tiles::Tile;
-use crate::hand_parser::{ParsedStandardHand, ParsedMeld, ParsedMeldType as HandParserMeldType};
+// FIX: Removed `ParsedMeld` as it was unused in this file.
+use crate::hand_parser::{ParsedStandardHand, ParsedMeldType as HandParserMeldType};
 use crate::game_state::{WinType, DeclaredMeld, DeclaredMeldType}; // For context from GameState
 
 /// Contains all necessary information about the winning hand and game context for Fu calculation.
@@ -196,7 +197,7 @@ pub fn calculate_fu(input: &FuCalculationInput) -> u8 {
 mod tests {
     use super::*;
     use crate::tiles::Tile::*;
-    use crate::hand_parser; // To call parse_standard_hand
+    use crate::hand_parser::{ParsedMeld}; // To call parse_standard_hand
 
     // Helper to create a ParsedStandardHand for testing FuInput
     fn create_test_parsed_hand(pair_tile: Tile, melds_data: Vec<(HandParserMeldType, [Tile;3])>) -> ParsedStandardHand {
@@ -221,7 +222,7 @@ mod tests {
             (HandParserMeldType::Shuntsu, [Man4, Man5, Man6]),
         ];
         let parsed_hand = create_test_parsed_hand(East, parsed_melds_data.clone());
-        let input = FuCalculationInput {
+        let _input = FuCalculationInput {
             parsed_hand: &parsed_hand,
             open_melds_declared: &[],
             win_type: WinType::Ron { winning_tile: East, discarder_seat: 1 },
@@ -234,7 +235,7 @@ mod tests {
         // Wait is Tanki on East = +2. Total 36 -> 40 Fu.
         // Let's make pair non-yakuhai for simpler base test: Pair Man7
         let parsed_hand_simple = create_test_parsed_hand(Man7, parsed_melds_data.clone());
-         let input_simple = FuCalculationInput {
+         let _input_simple = FuCalculationInput {
             parsed_hand: &parsed_hand_simple, open_melds_declared: &[],
             win_type: WinType::Ron { winning_tile: Man7, discarder_seat: 1 }, winning_tile: Man7,
             is_menzen_win: true, seat_wind: South, round_wind: East, _hand_before_win_completion: None,
@@ -258,9 +259,9 @@ mod tests {
     }
 
     #[test]
-    fn test_tsumo_no_pinfu() {
+	fn test_tsumo_no_pinfu() {
         let parsed_melds_data = vec![
-            (HandParserMeldType::Koutsu, [Man1, Man1, Man1]), // Ankou simples = 4 fu
+            (HandParserMeldType::Koutsu, [Man1, Man1, Man1]), // Ankou of a Terminal = 8 fu
             (HandParserMeldType::Shuntsu, [Pin1, Pin2, Pin3]),
             (HandParserMeldType::Shuntsu, [Man4, Man5, Man6]),
             (HandParserMeldType::Shuntsu, [Pin4, Pin5, Pin6]),
@@ -270,14 +271,17 @@ mod tests {
             parsed_hand: &parsed_hand,
             open_melds_declared: &[],
             win_type: WinType::Tsumo,
-            winning_tile: Man7, // Assume Tsumo on pair completion
+            winning_tile: Man7, // Assume Tsumo on pair completion (Tanki wait)
             is_menzen_win: true, // Tsumo is menzen for this test
             seat_wind: South, round_wind: East,
             _hand_before_win_completion: None,
         };
-        // Base 20 + Tsumo 2 = 22. Ankou Man1 = +4. Pair Man7 = 0. Wait Tanki Man7 = +2.
-        // Total = 22 + 4 + 2 = 28 -> 30 Fu.
-        assert_eq!(calculate_fu(&input), 30, "Tsumo, 1 Ankou (simples), simple pair, Tanki wait");
+        // Base 20 + Tsumo 2 = 22. 
+        // Ankou Man1 (Terminal) = +8. 
+        // Pair Man7 = 0. 
+        // Wait Tanki on Man7 = +2.
+        // Total = 22 + 8 + 2 = 32 -> 40 Fu.
+        assert_eq!(calculate_fu(&input), 40, "Tsumo, 1 Ankou (terminal), simple pair, Tanki wait");
     }
 
     #[test]
@@ -312,7 +316,7 @@ mod tests {
         // Hand: Ankou Man1 (terminal), Minkou Pin2 (simple, from Pon), Seq, Seq, Pair Sou7
         let ankou_meld = ParsedMeld { meld_type: HandParserMeldType::Koutsu, tiles: [Man1,Man1,Man1], is_concealed: true, representative_tile: Man1};
         let seq1_meld = ParsedMeld { meld_type: HandParserMeldType::Shuntsu, tiles: [Man4,Man5,Man6], is_concealed: true, representative_tile: Man4};
-        let seq2_meld = ParsedMeld { meld_type: HandParserMeldType::Shuntsu, tiles: [Pin4,Pin5,Pin6], is_concealed: true, representative_tile: Pin4};
+        let _seq2_meld = ParsedMeld { meld_type: HandParserMeldType::Shuntsu, tiles: [Pin4,Pin5,Pin6], is_concealed: true, representative_tile: Pin4};
         // The Minkou (Pon) of Pin2 would be one of the 4 melds in ParsedStandardHand.
         // Let's say hand_parser identified it as a Koutsu [Pin2,Pin2,Pin2].
         let minkou_as_parsed_koutsu = ParsedMeld { meld_type: HandParserMeldType::Koutsu, tiles: [Pin2,Pin2,Pin2], is_concealed: true, representative_tile: Pin2};
