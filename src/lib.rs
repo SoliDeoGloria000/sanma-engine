@@ -79,9 +79,15 @@ struct Env {
 #[pymethods]
 impl Env {
     #[new]
-    fn new() -> Self {
+    fn new(seed: Option<u64>) -> Self {
+        let actual_seed = seed.unwrap_or_else(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+        });
         Self {
-            state: GameState::new(0, 0, 0, None, None, None),
+            state: GameState::new(actual_seed, 0, 0, None, None, None),
             current_phase: GamePhase::RoundOver,
             pending_call_options: Vec::new(),
             player_who_made_shouminkan: None,
