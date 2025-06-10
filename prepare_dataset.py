@@ -72,7 +72,7 @@ def get_initial_state_from_log(round_data):
         initial_draws = [[tenhou_tile_to_engine_id(t) for t in round_data[5 + i * 3] if isinstance(t, int)] for i in range(3)]
         
         return {
-            "initial_dealer_idx": round_data[0][0],
+            "initial_dealer_idx": round_data[0][0] % 3,
             "initial_honba_sticks": round_data[0][1],
             "initial_scores": round_data[1][:3],
             "initial_hands": initial_hands,
@@ -108,11 +108,17 @@ def map_log_action_to_rust_id(log_action, env, legal_actions_mask=None):
             return riichi_id
         if 'f' in log_action: return ACTION_ID_KITA
         if 'a' in log_action:
-            tile_int = int(re.search(r'a(\d+)', log_action).group(1))
-            tile_id = tenhou_tile_to_engine_id(tile_int // 10 * 10 + tile_int % 10)
+            match = re.search(r'(\d{2})', log_action)
+            if not match:
+                return None
+            tile_int = int(match.group(1))
+            tile_id = tenhou_tile_to_engine_id(tile_int)
             return ACTION_ID_ANKAN_START + tile_id
         if 'k' in log_action:
-            tile_int = int(re.search(r'k(\d+)', log_action).group(1))
+            match = re.search(r'(\d{2})', log_action)
+            if not match:
+                return None
+            tile_int = int(match.group(1))
             tile_id = tenhou_tile_to_engine_id(tile_int)
             return ACTION_ID_SHOUMINKAN_START + tile_id
         if 'm' in log_action: return ACTION_ID_DAIMINKAN
@@ -180,7 +186,7 @@ def process_round(round_data, env):
         elif current_phase in ["WaitingForCalls", "ProcessingShouminkanChankan"]:
             # A discard just occurred. The engine is waiting for other players to interrupt.
             # An interrupting call ('p', 'm', 'n') is found in the caller's DRAW queue.
-            peek_action = draw_queues[current_actor_idx][0]
+            peek_action = draw_queues[current_actor_idx][0] if draw_queues[current_actor_idx] else None
             if isinstance(peek_action, str) and any(c in peek_action for c in 'mpn'):
                 # This player is making a call.
                 log_action = draw_queues[current_actor_idx].popleft()  # Pop the call action
