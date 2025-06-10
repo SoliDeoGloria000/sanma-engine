@@ -2,20 +2,25 @@
 
 ## Setup
 
-Install Python dependencies and build the Rust extension:
+Follow these steps to build and verify the project:
 
-```bash
-pip install -r requirements.txt
-maturin develop --release
-```
+1. **Install dependencies and `maturin`:**
+   ```bash
+   pip install -r requirements.txt
+   pip install maturin
+   ```
 
-Run tests with:
+2. **Build and install the Rust extension:**
+   ```bash
+   maturin develop --release
+   ```
 
-```bash
-pytest -q
-```
+3. **Run the tests to verify the installation:**
+   ```bash
+   pytest -q
+   ```
 
-Prepare dataset files with:
+`prepare_dataset.py` also relies on the compiled extension, so make sure it is built before running:
 
 ```bash
 python prepare_dataset.py
