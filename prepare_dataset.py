@@ -309,6 +309,10 @@ def process_round(round_data, env):
             if discard_queues[current_actor_idx]:
                 log_action = discard_queues[current_actor_idx].popleft()
             else:
+                if DEBUG_MODE:
+                    print(
+                        f"  [Debug] Early exit: no discard action for player {current_actor_idx}"
+                    )
                 break  # No more actions for this player.
 
         elif current_phase in ["WaitingForCalls", "ProcessingShouminkanChankan"]:
@@ -329,6 +333,10 @@ def process_round(round_data, env):
                 log_action = "PASS"
 
         if log_action is None:
+            if DEBUG_MODE:
+                print(
+                    f"  [Debug] Early exit: no log action available in phase {current_phase}"
+                )
             break
 
         rust_action_id = (
@@ -359,13 +367,15 @@ def process_round(round_data, env):
             ):
                 skip_next_draw[current_actor_idx] = True
             if done:
+                if DEBUG_MODE:
+                    print(f"  [Debug] Round finished after action '{log_action}'")
                 break
         except Exception as e:
             if DEBUG_MODE:
                 print(
                     f"  [Debug] Error stepping env with action '{log_action}' (ID {rust_action_id}): {e}\n{traceback.format_exc()}"
                 )
-            break
+            continue
 
     return obs_action_pairs
 
@@ -407,11 +417,18 @@ def main():
             with open(log_file_path, "r", encoding="utf-8") as f:
                 log_file_json = json.load(f)
             log_simple, log_complex = count_actions_in_log_file(log_file_json)
-            for round_data in log_file_json.get("log", []):
+            for round_idx, round_data in enumerate(log_file_json.get("log", [])):
                 if round_data[-1][0] == "流局":
                     continue
 
+                expected_simple, expected_complex = count_actions_in_round_raw(round_data)
+                expected_total = expected_simple + expected_complex
                 round_pairs = process_round(round_data, env)
+                if len(round_pairs) != expected_total:
+                    diff = expected_total - len(round_pairs)
+                    print(
+                        f"  [Warning] Round {round_idx}: parsed {len(round_pairs)} of {expected_total} actions (diff {diff})"
+                    )
                 for p in round_pairs:
                     if p["action"] == ACTION_ID_PASS:
                         file_pass += 1
