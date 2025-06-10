@@ -13,4 +13,4 @@ def test_process_round_sample():
     round_data = data['log'][0]
     env = Env()
     pairs = process_round(round_data, env)
-    assert len(pairs) == 24
+    assert len(pairs) == 33

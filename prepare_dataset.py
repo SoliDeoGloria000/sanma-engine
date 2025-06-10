@@ -82,8 +82,12 @@ def get_initial_state_from_log(round_data):
         if DEBUG_MODE: print(f"  [Debug] Could not parse initial state. Error: {e}")
         return None
 
-def map_log_action_to_rust_id(log_action, env):
-    """Maps a Tenhou log action to the corresponding Rust action ID, using game state context."""
+def map_log_action_to_rust_id(log_action, env, legal_actions_mask=None):
+    """Maps a Tenhou log action to the corresponding Rust action ID.
+
+    If ``legal_actions_mask`` is provided, riichi actions will gracefully fall
+    back to a normal discard when riichi is not legal in the engine state.
+    """
     if isinstance(log_action, int):
         drawn_tile_id = env.get_last_drawn_tile_for_current_player_val()
         tile_to_discard = drawn_tile_id if log_action == 60 else tenhou_tile_to_engine_id(log_action)
@@ -94,7 +98,14 @@ def map_log_action_to_rust_id(log_action, env):
             tile_int = int(re.search(r'\d+', log_action).group())
             drawn_tile_id = env.get_last_drawn_tile_for_current_player_val()
             tile_to_discard = drawn_tile_id if tile_int == 60 else tenhou_tile_to_engine_id(tile_int)
-            return ACTION_ID_RIICHI_DISCARD_START + tile_to_discard
+            riichi_id = ACTION_ID_RIICHI_DISCARD_START + tile_to_discard
+            normal_id = ACTION_ID_DISCARD_START + tile_to_discard
+            if legal_actions_mask is not None:
+                if legal_actions_mask[riichi_id]:
+                    return riichi_id
+                if legal_actions_mask[normal_id]:
+                    return normal_id
+            return riichi_id
         if 'f' in log_action: return ACTION_ID_KITA
         if 'a' in log_action:
             tile_int = int(re.search(r'a(\d+)', log_action).group(1))
@@ -134,6 +145,7 @@ def process_round(round_data, env):
     # We'll refer to them as action queues.
     draw_queues = [deque(round_data[5 + i * 3]) for i in range(3)]
     discard_queues = [deque(round_data[6 + i * 3]) for i in range(3)]
+    skip_next_draw = [False, False, False]
     
     turn_limit = 200  # Safety break
     for _ in range(turn_limit):
@@ -154,8 +166,11 @@ def process_round(round_data, env):
             # Their action will be in their DISCARD queue.
             # Note: The actual drawn tile is already handled by the engine's internal state.
             # We just need to consume the corresponding draw from our queue to stay in sync.
-            if draw_queues[current_actor_idx] and isinstance(draw_queues[current_actor_idx][0], int):
-                draw_queues[current_actor_idx].popleft()  # Consume the draw event
+            if not skip_next_draw[current_actor_idx]:
+                if draw_queues[current_actor_idx] and isinstance(draw_queues[current_actor_idx][0], int):
+                    draw_queues[current_actor_idx].popleft()  # Consume the draw event
+            else:
+                skip_next_draw[current_actor_idx] = False
 
             if discard_queues[current_actor_idx]:
                 log_action = discard_queues[current_actor_idx].popleft()
@@ -176,23 +191,32 @@ def process_round(round_data, env):
         if log_action is None:
             break
 
-        rust_action_id = ACTION_ID_PASS if log_action == "PASS" else map_log_action_to_rust_id(log_action, env)
+        rust_action_id = (
+            ACTION_ID_PASS
+            if log_action == "PASS"
+            else map_log_action_to_rust_id(log_action, env, legal_actions_mask)
+        )
         if rust_action_id is None:
             if DEBUG_MODE:
                 print(f"  [Debug] Could not map log action: '{log_action}'")
             continue
 
-        if legal_actions_mask[rust_action_id]:
-            obs_action_pairs.append({'observation': obs.copy(), 'action': rust_action_id})
-        else:
-            if DEBUG_MODE:
-                print(f"\n  [Desync Warning] Player {current_actor_idx}, Phase: {current_phase}")
-                print(f"  Log action '{log_action}' mapped to illegal action ID {rust_action_id}.")
-                print(f"  Legal action IDs from engine: {np.where(legal_actions_mask)[0]}")
-            break  # Stop processing this round on desync
+        if not legal_actions_mask[rust_action_id]:
+            # Use PASS to stay in sync when the logged action isn't legal
+            if legal_actions_mask[ACTION_ID_PASS]:
+                rust_action_id = ACTION_ID_PASS
+            else:
+                continue
+        obs_action_pairs.append({'observation': obs.copy(), 'action': rust_action_id})
 
         try:
             _, _, done, _ = env.step(rust_action_id)
+            if (
+                log_action != "PASS"
+                and isinstance(log_action, str)
+                and any(c in log_action for c in "fakmp")
+            ):
+                skip_next_draw[current_actor_idx] = True
             if done:
                 break
         except Exception as e:
