@@ -1,7 +1,12 @@
 # data/prepare_dataset.py
 import os
 import glob
-import numpy as np
+try:
+    import numpy as np
+except ImportError:
+    print("\n--- Missing Dependency ---")
+    print("NumPy is required. Please run 'pip install -r requirements.txt'.")
+    raise
 import re
 import json
 import traceback
