@@ -1,7 +1,12 @@
 # data/prepare_dataset.py
 import os
 import glob
-import numpy as np
+try:
+    import numpy as np
+except ImportError:
+    print("\n--- Missing Dependency ---")
+    print("NumPy is required. Please run 'pip install -r requirements.txt'.")
+    raise
 import re
 import json
 import traceback
@@ -149,36 +154,12 @@ def process_round(round_data, env):
             # Their action will be in their DISCARD queue.
             # Note: The actual drawn tile is already handled by the engine's internal state.
             # We just need to consume the corresponding draw from our queue to stay in sync.
-            if draw_queues[current_actor_idx]:
+            if draw_queues[current_actor_idx] and isinstance(draw_queues[current_actor_idx][0], int):
                 draw_queues[current_actor_idx].popleft()  # Consume the draw event
-=======
-    turn_limit = 200 # Safety break
-    for _ in range(turn_limit):
-        current_phase = env.get_game_phase_pystr()
-    
-        if current_phase == "RoundOver":
-            break
-
-        current_actor_idx = env.current_player_idx_py()
-        obs, legal_actions_mask = env.get_obs_and_legal_actions()
-    
-        log_action = None
-    
-        # --- State-Driven Logic ---
-
-        if current_phase == "PlayerTurnAction":
-        # The engine is waiting for the current player to act after a draw.
-        # Their action will be in their DISCARD queue.
-        # Note: The actual drawn tile is already handled by the engine's internal state.
-        # We just need to consume the corresponding draw from our queue to stay in sync.
-            if draw_queues[current_actor_idx]:
-                 draw_queues[current_actor_idx].popleft() # Consume the draw event
-      main
 
             if discard_queues[current_actor_idx]:
                 log_action = discard_queues[current_actor_idx].popleft()
             else:
-
                 break  # No more actions for this player.
 
         elif current_phase in ["WaitingForCalls", "ProcessingShouminkanChankan"]:
@@ -188,17 +169,6 @@ def process_round(round_data, env):
             if isinstance(peek_action, str) and any(c in peek_action for c in 'mpn'):
                 # This player is making a call.
                 log_action = draw_queues[current_actor_idx].popleft()  # Pop the call action
-=======
-                break # No more actions for this player.
-
-        elif current_phase in ["WaitingForCalls", "ProcessingShouminkanChankan"]:
-        # A discard just occurred. The engine is waiting for other players to interrupt.
-        # An interrupting call ('p', 'm', 'n') is found in the caller's DRAW queue.
-            peek_action = draw_queues[current_actor_idx][0]
-            if isinstance(peek_action, str) and any(c in peek_action for c in 'mpn'):
-                # This player is making a call.
-                log_action = draw_queues[current_actor_idx].popleft() # Pop the call action
-       main
             else:
                 # This player is not making a call, so they pass.
                 log_action = "PASS"
