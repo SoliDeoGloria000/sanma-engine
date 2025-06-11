@@ -148,18 +148,28 @@ def map_log_action_to_rust_id(log_action, env, legal_actions_mask=None):
     """
     if isinstance(log_action, int):
         drawn_tile_id = env.get_last_drawn_tile_for_current_player_val()
-        tile_to_discard = (
-            drawn_tile_id if log_action == 60 else tenhou_tile_to_engine_id(log_action)
-        )
+        try:
+            tile_to_discard = (
+                drawn_tile_id if log_action == 60 else tenhou_tile_to_engine_id(log_action)
+            )
+        except ValueError:
+            if DEBUG_MODE:
+                print(f"  [Debug] Invalid tile id {log_action}")
+            return None
         return ACTION_ID_DISCARD_START + tile_to_discard
 
     if isinstance(log_action, str):
         if "r" in log_action:
             tile_int = int(re.search(r"\d+", log_action).group())
             drawn_tile_id = env.get_last_drawn_tile_for_current_player_val()
-            tile_to_discard = (
-                drawn_tile_id if tile_int == 60 else tenhou_tile_to_engine_id(tile_int)
-            )
+            try:
+                tile_to_discard = (
+                    drawn_tile_id if tile_int == 60 else tenhou_tile_to_engine_id(tile_int)
+                )
+            except ValueError:
+                if DEBUG_MODE:
+                    print(f"  [Debug] Invalid tile id {tile_int} in riichi action")
+                return None
             riichi_id = ACTION_ID_RIICHI_DISCARD_START + tile_to_discard
             normal_id = ACTION_ID_DISCARD_START + tile_to_discard
             if legal_actions_mask is not None:
@@ -175,14 +185,24 @@ def map_log_action_to_rust_id(log_action, env, legal_actions_mask=None):
             if not match:
                 return None
             tile_int = int(match.group(1))
-            tile_id = tenhou_tile_to_engine_id(tile_int)
+            try:
+                tile_id = tenhou_tile_to_engine_id(tile_int)
+            except ValueError:
+                if DEBUG_MODE:
+                    print(f"  [Debug] Invalid tile id {tile_int} in ankan action")
+                return None
             return ACTION_ID_ANKAN_START + tile_id
         if "k" in log_action:
             match = re.search(r"(\d{2})", log_action)
             if not match:
                 return None
             tile_int = int(match.group(1))
-            tile_id = tenhou_tile_to_engine_id(tile_int)
+            try:
+                tile_id = tenhou_tile_to_engine_id(tile_int)
+            except ValueError:
+                if DEBUG_MODE:
+                    print(f"  [Debug] Invalid tile id {tile_int} in shouminkan action")
+                return None
             return ACTION_ID_SHOUMINKAN_START + tile_id
         if "m" in log_action:
             return ACTION_ID_DAIMINKAN
@@ -371,7 +391,7 @@ def process_round(round_data, env):
                 if DEBUG_MODE:
                     print(f"  [Debug] Round finished after action '{log_action}'")
                 break
-        except Exception as e:
+        except BaseException as e:
             if DEBUG_MODE:
                 print(
                     f"  [Debug] Error stepping env with action '{log_action}' (ID {rust_action_id}): {e}\n{traceback.format_exc()}"
