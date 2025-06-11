@@ -147,6 +147,9 @@ def map_log_action_to_rust_id(log_action, env, legal_actions_mask=None):
     back to a normal discard when riichi is not legal in the engine state.
     """
     if isinstance(log_action, int):
+        # Some logs incorrectly use 0 to denote a tsumo-giri (discarding the drawn tile)
+        if log_action == 0:
+            log_action = 60
         drawn_tile_id = env.get_last_drawn_tile_for_current_player_val()
         try:
             tile_to_discard = (
@@ -161,6 +164,9 @@ def map_log_action_to_rust_id(log_action, env, legal_actions_mask=None):
     if isinstance(log_action, str):
         if "r" in log_action:
             tile_int = int(re.search(r"\d+", log_action).group())
+            # Some logs use 0 instead of 60 for tsumo-giri riichi
+            if tile_int == 0:
+                tile_int = 60
             drawn_tile_id = env.get_last_drawn_tile_for_current_player_val()
             try:
                 tile_to_discard = (
@@ -185,6 +191,8 @@ def map_log_action_to_rust_id(log_action, env, legal_actions_mask=None):
             if not match:
                 return None
             tile_int = int(match.group(1))
+            if tile_int == 0:
+                tile_int = 60
             try:
                 tile_id = tenhou_tile_to_engine_id(tile_int)
             except ValueError:
@@ -197,6 +205,8 @@ def map_log_action_to_rust_id(log_action, env, legal_actions_mask=None):
             if not match:
                 return None
             tile_int = int(match.group(1))
+            if tile_int == 0:
+                tile_int = 60
             try:
                 tile_id = tenhou_tile_to_engine_id(tile_int)
             except ValueError:
