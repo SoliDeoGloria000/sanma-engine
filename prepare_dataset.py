@@ -191,8 +191,11 @@ def map_log_action_to_rust_id(log_action, env, legal_actions_mask=None):
             if not match:
                 return None
             tile_int = int(match.group(1))
+nae2aa-codex/fix-issues-processing-dataset-files
             if tile_int == 0:
                 tile_int = 60
+=======
+main
             try:
                 tile_id = tenhou_tile_to_engine_id(tile_int)
             except ValueError:
@@ -205,8 +208,11 @@ def map_log_action_to_rust_id(log_action, env, legal_actions_mask=None):
             if not match:
                 return None
             tile_int = int(match.group(1))
+        nae2aa-codex/fix-issues-processing-dataset-files
             if tile_int == 0:
                 tile_int = 60
+=======
+         main
             try:
                 tile_id = tenhou_tile_to_engine_id(tile_int)
             except ValueError:
