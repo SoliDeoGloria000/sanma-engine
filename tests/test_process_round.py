@@ -56,3 +56,18 @@ def test_process_round_continues_on_error(monkeypatch):
     pairs = process_round(round_data, env)
 
     assert len(pairs) == len(baseline_pairs)
+
+
+def test_process_round_handles_zero_tile():
+    with open('tests/data/zero_tile_round.json', 'r') as f:
+        data = json.load(f)
+    round_data = data['log'][0]
+    env = Env()
+    pairs = process_round(round_data, env)
+
+    # Should parse same number of actions as the normal sample round
+    with open('tests/data/sample_round.json', 'r') as f:
+        base = json.load(f)
+    expected_pairs = len(process_round(base['log'][0], Env()))
+
+    assert len(pairs) == expected_pairs
